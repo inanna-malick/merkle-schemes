@@ -108,32 +108,88 @@ import Data.HashMap.Strict (HashMap)
 -- --         Nothing -> pure $ Left NetworkStoreBrokenLink
 
 
+type Name = String
+
 data Pointer (f :: * -> *) = Pointer Int -- note: why does f require kind sig?
-data Concept a = ConceptTree [a] | Leaf String
+data Tree a = Node [a] | Leaf Int
 
 data Term (f :: * -> *) = In { out :: f (HashTerm f) }
+
+
+-- note: human readable name should go here, b/c both node and leaf have them...
 data HashTerm (f :: * -> *)
-  = Direct (Pointer f) (Term f) -- node id is included in node metadata of direct ref (pointer)
-  | Indirect (Pointer f)        -- indirect ref is just a pointer
+  = Direct   Name (Pointer f) (Term f) -- node id is included in node metadata of direct ref (pointer)
+  | Indirect Name (Pointer f)          -- indirect ref is just a pointer
 
 -- type-level guarantee that it pops a layer off the hash stack, nice
 deref :: Pointer f -> IO (Term f)
 deref = undefined -- network call goes here (todo println to debug along w/ w/e lookup)
 
 
-type Algebra f a = f a -> a
+type ZipAlgebra f a = (f a, f a) -> a
 type HaltDeterminer f a = f a -> Bool -- doesn't know nuthin about 'a', must determine solely on structure of thingy...
 -- actually, looks like this won't work - need to compare 2x branch's hashterm structure, not tree structure..
 
+
+type FileBody = Int
+
+ -- todo idk record syntax or w/e for branches, will quickly become unreadable..
+data Diff = NoDiff
+          | FileModifiedDiff  (Name, FileBody, FileBody)
+          | FileReplacedWithDirDiff -- (String, Pointer, Pointer)
+          | DirReplacedWithFileDiff -- (String, Pointer, Pointer)
+          | EntityAddedToDirDiff     (String, Pointer, Pointer)
+          | EntityRemovedFromDirDiff (String, Pointer, Pointer)
+          | EntityRenamedDiff        (Name, Name)
+
 -- | yeet yueet
 -- todo bake in failure modes (either return type to represent deref fail, can 'error' for now)
-merklecata :: (Traversable f, Functor f) => Algebra f a -> HashTerm f -> IO a
-merklecata alg ht = case ht of
-  Direct _ t -> -- could use node pointer to do checksum here.. don't tho
-    fmap alg . traverse (merklecata alg) $ out t
-  Indirect p -> do
-    t <- deref p
-    fmap alg . traverse (merklecata alg) $ out t
+-- Bool is True for equal, false for not (placeholder for diff type)
+merklecata :: (Traversable f, Functor f) => HashTerm f -> HashTerm f -> IO Diff
+merklecata a b = case (htid a == htid b, htn a == htn b)
+  (False, False) -> error "neither name nor hash matches - why even compare??????? (error case?)"
+  -- hash matches, name does not
+  -- rename while preserving structure? I guess allowed.
+  -- but name should have effect on hash of hashterm
+    -- so can't just hash based on pure tree struct w/o ht
+  (True,  False) -> pure EntityRenamedDiff (htn a, htn b)
+  (True, True) -> pure NoDiff -- no need to explore further here
+  -- hid match failed but name is the same
+  (False, True) -> case (derefOneLayer a, derefOneLayer b) of
+      (Leaf fca, Leaf fcb)
+        | fca =/= fcb -> FileModifiedDiff (htn a, fca, fcb)
+        | otherwise   -> error "file contents don't differ? but hash ids do... (error case)"
+      (Node _, Leaf _) -> DirReplacedWithFileDiff
+      (Leaf _, Node _) -> FileReplacedWithDirDiff
+      (Node ns, Node ns) ->
+        -- here's where it gets interesting! recurse and compare..
+        -- plan: zip up everything in each set via name as id, do comparison?
+            -- BUT: if name changes but hash is same then what!
+        -- zip based on name xor id match? what the fuck this makes no sense...
+        -- oh wait, use a map for names for each then can zip based on that and have
+        -- Both (a, b), Left (a), Right (a) cases to split out on
+
+
+
+  where
+    -- grab hash id of a node
+    htid :: HashTerm f -> Pointer f
+    htid (Direct _ p _) = p
+    htid (Indirect _ p) = p
+
+    -- grab name of a node
+    htn :: HashTerm f -> Name
+    htn (Direct n _ _) = n
+    htn (Indirect n _) = n
+
+    derefOneLayer :: HashTerm f -> Term f
+    derefOneLayer ht = case ht of
+      Direct _ _ t -> pure t
+        fmap alg . traverse (merklecata alg) $ out t
+      Indirect _ p -> do
+        t <- deref p
+        pure t
+        fmap alg . traverse (merklecata alg) $ out t
 
 
 -- | just the tree
