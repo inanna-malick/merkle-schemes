@@ -7,7 +7,7 @@ cabal build
 cabal run
 ```
 
-expected output, showing comparison of examples/before to examples/after[1..3]:
+expected output, showing comparison of `examples/before` to `examples/after[1..3]`:
 
 ```
 Running merkle-dag-compare...
