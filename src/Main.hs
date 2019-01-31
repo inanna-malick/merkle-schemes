@@ -22,12 +22,13 @@ import Data.Set (Set)
 type Name = String
 
 -- pointer to entity via said entity's hash
-data Pointer = Pointer Int deriving (Eq, Show, Generic)
+newtype Pointer = Pointer Int deriving (Eq, Ord, Show, Generic)
 instance Hash.Hashable Pointer
 
 data NamedEntity (f :: * -> *) a = NamedEntity Name (f a) deriving (Eq, Show, Functor)
 
-data Tree (a :: *) = Node (Set a) | Leaf Int  deriving (Eq, Show)
+-- note: Node spiritually has a set of children, not a list, but I want a Functor instance
+data Tree (a :: *) = Node [a] | Leaf Int  deriving (Eq, Show, Functor)
 
 data Term (f :: * -> *) = In { out :: f (HashTerm f) }
 
@@ -53,8 +54,8 @@ htPointer (Indirect p) = p
 
 
 -- lawless instance YOLO (duplicates resulting from 'b' will be removed)
-fmapSet :: (a -> b) -> Set a -> Set b
-fmapSet f = Set.toList fmap f . Set.toList
+-- fmapSet :: (a -> b) -> Set a -> Set b
+-- fmapSet f = Set.toList fmap f . Set.toList
 
 -- | hash to get pointer, basically - builder fn
 -- NOTE: should really put canonical hash fns somewhere more central/clearer
@@ -142,31 +143,39 @@ merklecata ht1 ht2 = do
             (Node _, Leaf _) -> pure [DirReplacedWithFile]
             (Leaf _, Node _) -> pure [FileReplacedWithDir]
             (Node ns1, Node ns2) -> do
+              let ns1Pointers = Set.fromList $ fmap htPointer ns1
+                  ns2Pointers = Set.fromList $ fmap htPointer ns2
+
                -- need to deref to get names to build diffs -- potential optimization here..
               -- NOTE: need to ONLY run this on those sub-trees with non-matching hashes or else ERROR
               -- note: could probably optimize this bit
-              let filteredNs1 = Set.filter (not . flip Set.member ns2) ns1
-                  filteredNs2 = Set.filter (not . flip Set.member ns1) ns2
+              -- DECISION: order doesn't matter, so drop down to set and back here
+              -- need to do this comparison via pointer
+              let filteredNs1 = filter (not . flip Set.member (ns2Pointers) . htPointer) ns1
+                  filteredNs2 = filter (not . flip Set.member (ns1Pointers) . htPointer) ns2
 
-              derefedNs1 <- traverse derefOneLayer $ Set.toList filteredNs1
-              derefedNs2 <- traverse derefOneLayer $ Set.toList filteredNs2
-
-              -- NOTE: do this BEFORE DEREF
-              -- filter out all elems w/ i
-              -- let derefedNs1 = filter (not . elem derefedNs2') derefedNs1'
-              --     derefedNs2 = filter (not . elem derefedNs2') derefedNs1'
+              derefedNs1 <- traverse derefOneLayer filteredNs1
+              derefedNs2 <- traverse derefOneLayer filteredNs2
 
               let mkByNameMap :: [Term (NamedEntity Tree)] -> HashMap Name (Term (NamedEntity Tree))
-                  mkByNameMap ns = Map.fromList . fmap mkByNameMapEntry ns
+                  mkByNameMap ns = Map.fromList $ fmap mkByNameMapEntry ns
                   mkByNameMapEntry t@(In (NamedEntity n _)) = (n, t)
 
-              let cmpRes :: [These (Name, Term (NamedEntity Tree)) (Name, Term (NamedEntity Tree))]
-                  cmpRes = mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
+                  byNameMap1 = mkByNameMap derefedNs1
+                  byNameMap2 = mkByNameMap derefedNs2
+
+              let cmpRes :: [These (Name, Term (NamedEntity Tree))]
+                  cmpRes = mapCompare byNameMap1 byNameMap2
+
+              putStrLn "by name maps 1/2, cmp res"
+              print $ fmap showT byNameMap1
+              print $ fmap showT byNameMap2
+              print $ fmap (fmap (fmap showT)) cmpRes
 
               join <$> traverse resolveMapDiff cmpRes
 
     -- todo NAME
-    resolveMapDiff :: These (Name, Term (NamedEntity Tree)) (Name, Term (NamedEntity Tree))
+    resolveMapDiff :: These (Name, Term (NamedEntity Tree))
                    -> IO [Diff]
     resolveMapDiff (This (name,_))     = pure [EntityDeleted name]
     resolveMapDiff (That (name,_))     = pure [EntityCreated name]
@@ -186,19 +195,19 @@ merklecata ht1 ht2 = do
 
 
 
-mapCompare :: Eq k => Hash.Hashable k => HashMap k v -> HashMap k v -> [These (k,v) (k,v)]
+mapCompare :: Eq k => Hash.Hashable k => HashMap k v -> HashMap k v -> [These (k,v)]
 mapCompare h1 h2 = h1Only ++ h2Only ++ both
   where h1Only = fmap This . Map.toList $ Map.difference h1 h2
-        h2Only = fmap That . Map.toList $ Map.difference h1 h2
+        h2Only = fmap That . Map.toList $ Map.difference h2 h1
         both   = Map.elems $ Map.intersectionWithKey (\k v1 v2 -> These (k,v1) (k,v2)) h1 h2
 
-
-data These a b = This a | These a b | That b
+-- | specialized to 'a a' to make functor derive easy... could do bifunctor?
+data These a = This a | These a a | That a deriving (Eq, Ord, Show, Functor)
 
 
 main = do
   putStrLn "Hello"
   putStrLn "World"
-  res <- merklecata (Indirect $ fst node1) (Indirect $ fst node2) 
+  res <- merklecata (Indirect $ fst node1) (Indirect $ fst node2)
   print $ res
 
