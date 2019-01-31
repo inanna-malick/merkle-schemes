@@ -20,7 +20,7 @@ import Types
 buildDirTree :: GlobalStore -> FilePath -> FilePath -> IO (HashTerm (NamedEntity Tree))
 buildDirTree store path fn = do
   let fullpath = path ++ "/" ++ fn
-  putStrLn $ "run buildDirTree on: " ++ fullpath
+  -- putStrLn $ "run buildDirTree on: " ++ fullpath
   isFile <- Dir.doesFileExist fullpath
   if isFile
     then do

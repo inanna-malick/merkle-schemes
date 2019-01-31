@@ -18,7 +18,7 @@ import qualified Data.Set as Set
 import           Types
 --------------------------------------------
 
---- | type-level guarantee that it pops a layer off the hash stack, nice
+-- | fetch a value from the global store. Pretend this involves a network call.
 deref :: GlobalStore -> Pointer -> IO (Term (NamedEntity Tree))
 deref store p = do
   globalStateStore <- readIORef store
@@ -29,6 +29,10 @@ deref store p = do
       putStrLn $ "returning deref res: " ++ showT x
       pure x
 
+
+-- | Compare two merkle trees for equality, producing diffs
+--   lazily fetches structure of the two trees such that only the parts required
+--   to do this comparison are fetched from the global state store (via 'network call')
 -- TODO: hammer this into shape such that I can use bare-bones recursion schemes such as 'cata'
 compareMerkleTrees :: GlobalStore -> HashTerm (NamedEntity Tree) -> HashTerm (NamedEntity Tree) -> IO [Diff]
 compareMerkleTrees store ht1 ht2 = do
@@ -49,8 +53,7 @@ compareMerkleTrees store ht1 ht2 = do
 
     compareDerefed' (NamedEntity name1 entity1) (NamedEntity name2 entity2)
       | name1 /= name2 =
-          -- TODO: in this case compare entities and do the below if not ==
-          -- if == aside from name have renamed case that should be handled
+          -- flatten out sub-entities to only contain pointers then check equality
           if (fmap htPointer entity1 == fmap htPointer entity2)
             then
               pure [EntityRenamed name1 name2]
@@ -86,14 +89,8 @@ compareMerkleTrees store ht1 ht2 = do
               let cmpRes :: [These (Name, Term (NamedEntity Tree))]
                   cmpRes = mapCompare byNameMap1 byNameMap2
 
-              -- putStrLn "by name maps 1/2, cmp res"
-              -- print $ fmap showT byNameMap1
-              -- print $ fmap showT byNameMap2
-              -- print $ fmap (fmap (fmap showT)) cmpRes
-
               join <$> traverse resolveMapDiff cmpRes
 
-    -- todo better name maybe?
     resolveMapDiff :: These (Name, Term (NamedEntity Tree))
                    -> IO [Diff]
     resolveMapDiff (This (name,_))     = pure [EntityDeleted name]
