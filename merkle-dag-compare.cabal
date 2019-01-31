@@ -18,10 +18,14 @@ cabal-version:       >=1.10
 executable merkle-dag-compare
   main-is:             Main.hs
   -- other-modules:
-  -- other-extensions:    
+  -- other-extensions:
+
+  ghc-options:     -Wall -Werror
+
   build-depends:       base >=4.8 && <4.9,
                        hashable,
                        containers,
-                       unordered-containers
+                       unordered-containers,
+                       directory
   hs-source-dirs:      src
   default-language:    Haskell2010

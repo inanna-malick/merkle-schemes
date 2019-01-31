@@ -17,24 +17,63 @@ import qualified Data.HashMap.Strict as Map
 import Data.HashMap.Strict (HashMap)
 
 import qualified Data.Set as Set
-import Data.Set (Set)
 
+import qualified System.Directory as Dir
+
+import Data.IORef
+
+type Hash = Int
 type Name = String
 
--- pointer to entity via said entity's hash
-newtype Pointer = Pointer Int deriving (Eq, Ord, Show, Generic)
+type GlobalStore = IORef (HashMap Pointer (Term (NamedEntity Tree)))
+
+-- TODO LIST MAIN
+-- have fn that derives tree from actual on-disk dir structure to cleanly allow diffs of actual structures
+--   note: prohibit any symlinks or whatever
+
+-- | actual dir recursive traversal
+-- ignores permissions in diffs and coerces file contents into unicode #YOLO
+buildDirTree :: GlobalStore -> FilePath -> FilePath -> IO (HashTerm (NamedEntity Tree))
+buildDirTree store path fn = do
+  let fullpath = path ++ "/" ++ fn
+  putStrLn $ "run buildDirTree on: " ++ fullpath
+  isFile <- Dir.doesFileExist fullpath
+  if isFile
+    then do
+      fc <- readFile fullpath
+      let x = lift $ NamedEntity fn $ Leaf fc
+      modifyIORef' store (uncurry Map.insert x) -- todo dont uncurry, instead pattern match?
+      pure $ uncurry Direct x
+    else do
+      isDir <- Dir.doesDirectoryExist fullpath
+      if isDir
+        then do
+          contents <- filter (/= ".") . filter (/= "..") <$> Dir.getDirectoryContents fullpath
+          putStrLn $ "recurse on contents: " ++ show contents
+          -- actual tree structure thrown away, only pointers used.. need to store in global map
+          -- for actual use later
+          entities <- traverse (buildDirTree store fullpath) contents
+          let x = lift $ NamedEntity fn $ Node $ fmap htPointer entities
+          modifyIORef' store (uncurry Map.insert x) -- todo dont uncurry, instead pattern match?
+          pure $ uncurry Direct x
+      else error $ "invalid file path " ++ fullpath ++ "? wtf yo no symlinks or sockets allowed"
+
+
+newtype Pointer = Pointer { unPointer :: Hash }
+  deriving (Eq, Ord, Show, Generic)
+
 instance Hash.Hashable Pointer
 
 data NamedEntity (f :: * -> *) a = NamedEntity Name (f a) deriving (Eq, Show, Functor)
 
 -- note: Node spiritually has a set of children, not a list, but I want a Functor instance
-data Tree (a :: *) = Node [a] | Leaf Int  deriving (Eq, Show, Functor)
+data Tree (a :: *) = Node [a] | Leaf String deriving (Eq, Show, Functor)
 
 data Term (f :: * -> *) = In { out :: f (HashTerm f) }
 
 data HashTerm (f :: * -> *)
   = Direct   Pointer (Term f) -- node id is included in node metadata of direct ref (pointer)
-  | Indirect Pointer          -- indirect ref is just a pointer
+  | Indirect Pointer          -- indirect ref is just a pointer in some hash-addressed store
 
 
 showHT :: HashTerm (NamedEntity Tree) -> String
@@ -53,42 +92,43 @@ htPointer (Direct p _) = p
 htPointer (Indirect p) = p
 
 
--- lawless instance YOLO (duplicates resulting from 'b' will be removed)
--- fmapSet :: (a -> b) -> Set a -> Set b
--- fmapSet f = Set.toList fmap f . Set.toList
-
--- | hash to get pointer, basically - builder fn
+-- | hash to get pointer, basically - builder fn that takes a flat single layer of a tree
+--   and lifts it to produce a direct reference to a pointer-identified tree layer
 -- NOTE: should really put canonical hash fns somewhere more central/clearer
 lift :: NamedEntity Tree Pointer -> (Pointer, Term (NamedEntity Tree))
-lift e = (hash, (In $ fmap Indirect e))
-  where
-    hash = Pointer $ case e of
-      NamedEntity n (Leaf contents) -> (Hash.hash n) `Hash.hashWithSalt` (Hash.hash contents)
-      NamedEntity n (Node contents) -> (Hash.hash n) `Hash.hashWithSalt` (Hash.hash contents)
+lift e = (Pointer $ hashTree e, (In $ fmap Indirect e))
 
-leaf1 :: (Pointer, Term (NamedEntity Tree))
-leaf1 = lift . NamedEntity "leaf1" $ Leaf 1
+-- hash a single merkle tree entry with all subentities represented as hash pointers
+hashTree :: NamedEntity Tree Pointer -> Hash
+hashTree (NamedEntity n (Leaf contents))
+  = Hash.hash n `Hash.hashWithSalt` Hash.hash contents
+hashTree (NamedEntity n (Node contents))
+  = Hash.hash n `Hash.hashWithSalt` Hash.hash contents
 
-leaf2 :: (Pointer, Term (NamedEntity Tree))
-leaf2 = lift . NamedEntity "leaf2" $ Leaf 2
+-- leaf1 :: (Pointer, Term (NamedEntity Tree))
+-- leaf1 = lift . NamedEntity "leaf1" $ Leaf "one"
 
-node1 :: (Pointer, Term (NamedEntity Tree))
-node1 = lift . NamedEntity "node1" $ Node [fst leaf1, fst leaf2]
+-- leaf2 :: (Pointer, Term (NamedEntity Tree))
+-- leaf2 = lift . NamedEntity "leaf2" $ Leaf "two"
 
-node1' :: HashTerm (NamedEntity Tree)
-node1' = uncurry Direct node1
+-- node1 :: (Pointer, Term (NamedEntity Tree))
+-- node1 = lift . NamedEntity "node1" $ Node [fst leaf1, fst leaf2]
 
--- | node 1 with diff: leaf2 removed
-node2 :: (Pointer, Term (NamedEntity Tree))
-node2 = lift . NamedEntity "node1" $ Node [fst leaf1]
+-- leaf2node :: (Pointer, Term (NamedEntity Tree))
+-- leaf2node = lift . NamedEntity "leaf2" $ Node [fst leaf2]
+
+-- -- | node 1 with diff: leaf2 replaced with node
+-- node2 :: (Pointer, Term (NamedEntity Tree))
+-- node2 = lift . NamedEntity "node1" $ Node [fst leaf1] -- , fst leaf2node]
 
 -- | immutable global state store (shh, pretend it's on the other end of a network call)
-globalStateStore :: HashMap Pointer (Term (NamedEntity Tree))
-globalStateStore = Map.fromList [leaf1, leaf2, node1, node2]
+-- globalStateStore :: HashMap Pointer (Term (NamedEntity Tree))
+-- globalStateStore = Map.fromList [leaf1, leaf2, node1, node2, leaf2node]
 
 -- | type-level guarantee that it pops a layer off the hash stack, nice
-deref :: Pointer -> IO (Term (NamedEntity Tree))
-deref p = do
+deref :: GlobalStore -> Pointer -> IO (Term (NamedEntity Tree))
+deref store p = do
+  globalStateStore <- readIORef store
   putStrLn $ "attempt to deref " ++ show p ++ " via global state store"
   case Map.lookup p globalStateStore of
     Nothing -> error "YOLO420"
@@ -96,26 +136,25 @@ deref p = do
       putStrLn $ "returning deref res: " ++ showT x
       pure x
 
-type FileBody = Int
+type FileBody = String
 
 data Diff = LeafModified  (Name, FileBody, FileBody)
-          | FileReplacedWithDir -- (String, Pointer, Pointer)
-          | DirReplacedWithFile -- (String, Pointer, Pointer)
-          | EntityAddedToDir     -- (String, Pointer, Pointer)
-          | EntityRemovedFromDir -- (String, Pointer, Pointer)
+          | FileReplacedWithDir Name
+          | DirReplacedWithFile Name
+          | EntityAddedToDir
+          | EntityRemovedFromDir
           | EntityRenamed (Name, Name)
-          | EntityDeleted Name -- dir or file
-          | EntityCreated Name -- dir or file
+          | EntityDeleted Name
+          | EntityCreated Name
   deriving (Show)
 
--- | yeet yueet
--- todo bake in failure modes (either return type to represent deref fail, can 'error' for now)
-merklecata :: HashTerm (NamedEntity Tree) -> HashTerm (NamedEntity Tree) -> IO [Diff]
-merklecata ht1 ht2 = do
-  putStrLn $ "merklecata: " ++ showHT ht1 ++ ", " ++ showHT ht2
-  case (htid ht1 == htid ht2) of
+-- TODO: hammer this into shape such that I can use bare-bones recursion schemes such as 'cata'
+merklecata :: GlobalStore -> HashTerm (NamedEntity Tree) -> HashTerm (NamedEntity Tree) -> IO [Diff]
+merklecata store ht1 ht2 = do
+  -- putStrLn $ "merklecata: " ++ showHT ht1 ++ ", " ++ showHT ht2
+  case (htPointer ht1 == htPointer ht2) of
     True  -> pure [] -- no need to explore further here
-    False -> do -- hash mismatch NOTE: need to deref to look at node names now, which tbh makes sense
+    False -> do -- hash mismatch - deref and explore further
       ne1 <- out <$> derefOneLayer ht1
       ne2 <- out <$> derefOneLayer ht2
       compareDerefed ne1 ne2
@@ -128,29 +167,24 @@ merklecata ht1 ht2 = do
       compareDerefed' ne1 ne2
 
     compareDerefed' (NamedEntity name1 entity1) (NamedEntity name2 entity2)
-      | name1 /= name2 = -- this case is weird and problematic?
-          -- usually an error case, but can happen if given (eg) top level complete disjoint trees
-          -- with different id, different name (could have diff cases for node -> leaf, leaf -> node)
-          -- NOTE: hitting this case TOO EARLY, need to just continue traversal here..
+      | name1 /= name2 =
+          -- TODO: in this case compare entities and do the below if not ==
+          -- if == aside from name have renamed case that should be handled
           pure [EntityDeleted name1, EntityCreated name2]
       | otherwise = -- no name mismatch, but known hash mismatch - must explore further
           case (entity1, entity2) of
             (Leaf fc1, Leaf fc2)
               | fc1 /= fc2   -> pure [LeafModified (name1, fc1, fc2)]
-              -- this case is weird because recursing directly via compareDerefed means we skip the
-              -- top level hash comparison.. this should instead be nodiff.
-              | otherwise    -> pure []
-            (Node _, Leaf _) -> pure [DirReplacedWithFile]
-            (Leaf _, Node _) -> pure [FileReplacedWithDir]
+              -- ASSERTION: we can only get here if there's a hash diff, but
+              --            if we have a hash diff then the file contents should differ!?!?
+              | otherwise    -> error "wtf"
+            (Node _, Leaf _) -> pure [DirReplacedWithFile name1]
+            (Leaf _, Node _) -> pure [FileReplacedWithDir name1]
             (Node ns1, Node ns2) -> do
               let ns1Pointers = Set.fromList $ fmap htPointer ns1
                   ns2Pointers = Set.fromList $ fmap htPointer ns2
 
-               -- need to deref to get names to build diffs -- potential optimization here..
-              -- NOTE: need to ONLY run this on those sub-trees with non-matching hashes or else ERROR
-              -- note: could probably optimize this bit
-              -- DECISION: order doesn't matter, so drop down to set and back here
-              -- need to do this comparison via pointer
+              -- DECISION: order of node children doesn't matter, so drop down to Set here
               let filteredNs1 = filter (not . flip Set.member (ns2Pointers) . htPointer) ns1
                   filteredNs2 = filter (not . flip Set.member (ns1Pointers) . htPointer) ns2
 
@@ -167,30 +201,25 @@ merklecata ht1 ht2 = do
               let cmpRes :: [These (Name, Term (NamedEntity Tree))]
                   cmpRes = mapCompare byNameMap1 byNameMap2
 
-              putStrLn "by name maps 1/2, cmp res"
-              print $ fmap showT byNameMap1
-              print $ fmap showT byNameMap2
-              print $ fmap (fmap (fmap showT)) cmpRes
+              -- putStrLn "by name maps 1/2, cmp res"
+              -- print $ fmap showT byNameMap1
+              -- print $ fmap showT byNameMap2
+              -- print $ fmap (fmap (fmap showT)) cmpRes
 
               join <$> traverse resolveMapDiff cmpRes
 
-    -- todo NAME
+    -- todo better name maybe?
     resolveMapDiff :: These (Name, Term (NamedEntity Tree))
                    -> IO [Diff]
     resolveMapDiff (This (name,_))     = pure [EntityDeleted name]
     resolveMapDiff (That (name,_))     = pure [EntityCreated name]
     resolveMapDiff (These (_,a) (_,b)) = compareDerefed (out a) (out b)
 
-    -- grab hash id of a node
-    htid :: HashTerm f -> Pointer
-    htid (Direct p _) = p
-    htid (Indirect p) = p
-
     derefOneLayer :: HashTerm (NamedEntity Tree) -> IO (Term (NamedEntity Tree))
     derefOneLayer ht = case ht of
       Direct _ t -> pure t
       Indirect p -> do
-        t <- deref p
+        t <- deref store p
         pure t
 
 
@@ -204,10 +233,11 @@ mapCompare h1 h2 = h1Only ++ h2Only ++ both
 -- | specialized to 'a a' to make functor derive easy... could do bifunctor?
 data These a = This a | These a a | That a deriving (Eq, Ord, Show, Functor)
 
-
+main :: IO ()
 main = do
-  putStrLn "Hello"
-  putStrLn "World"
-  res <- merklecata (Indirect $ fst node1) (Indirect $ fst node2)
+  globalStateStore <- newIORef Map.empty
+  before <- buildDirTree globalStateStore "examples/before" "node1"
+  after  <- buildDirTree globalStateStore "examples/after"  "node1"
+  res <- merklecata globalStateStore before after
   print $ res
 
