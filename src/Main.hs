@@ -20,7 +20,15 @@ main :: IO ()
 main = do
   globalStateStore <- newIORef Map.empty
   before <- buildDirTree globalStateStore "examples/before" "node1"
-  after  <- buildDirTree globalStateStore "examples/after3" "node2"
-  res <- compareMerkleTrees globalStateStore before after
-  print $ res
+  after1 <- buildDirTree globalStateStore "examples/after1" "node1"
+  after2 <- buildDirTree globalStateStore "examples/after2" "node1"
+  after3 <- buildDirTree globalStateStore "examples/after3" "node2"
 
+  putStrLn "comparing before to after1"
+  compareMerkleTrees globalStateStore before after1 >>= print
+
+  putStrLn "comparing before to after2"
+  compareMerkleTrees globalStateStore before after2 >>= print
+
+  putStrLn "comparing before to after3"
+  compareMerkleTrees globalStateStore before after3 >>= print
