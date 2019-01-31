@@ -55,6 +55,17 @@
   (major1) == 0 && (major2) == 2 && (minor) <= 10)
 #endif /* MIN_VERSION_unordered_containers */
 
+/* package directory-1.2.2.0 */
+#ifndef VERSION_directory
+#define VERSION_directory "1.2.2.0"
+#endif /* VERSION_directory */
+#ifndef MIN_VERSION_directory
+#define MIN_VERSION_directory(major1,major2,minor) (\
+  (major1) <  1 || \
+  (major1) == 1 && (major2) <  2 || \
+  (major1) == 1 && (major2) == 2 && (minor) <= 2)
+#endif /* MIN_VERSION_directory */
+
 /* tool gcc-5.4.0 */
 #ifndef TOOL_VERSION_gcc
 #define TOOL_VERSION_gcc "5.4.0"
