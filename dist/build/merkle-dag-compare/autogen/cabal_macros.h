@@ -33,6 +33,17 @@
   (major1) == 1 && (major2) == 2 && (minor) <= 7)
 #endif /* MIN_VERSION_hashable */
 
+/* package containers-0.5.6.2 */
+#ifndef VERSION_containers
+#define VERSION_containers "0.5.6.2"
+#endif /* VERSION_containers */
+#ifndef MIN_VERSION_containers
+#define MIN_VERSION_containers(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  5 || \
+  (major1) == 0 && (major2) == 5 && (minor) <= 6)
+#endif /* MIN_VERSION_containers */
+
 /* package unordered-containers-0.2.10.0 */
 #ifndef VERSION_unordered_containers
 #define VERSION_unordered_containers "0.2.10.0"
