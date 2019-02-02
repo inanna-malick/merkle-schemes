@@ -23,9 +23,10 @@ executable merkle-dag-compare
   ghc-options:     -Wall -Werror
 
   build-depends:       base >=4.8 && <4.9,
-                       hashable,
                        containers,
+                       directory,
+                       hashable,
                        unordered-containers,
-                       directory
+                       pretty
   hs-source-dirs:      src
   default-language:    Haskell2010
