@@ -12,7 +12,8 @@ import qualified Data.HashMap.Strict as Map
 import           Data.IORef
 import qualified System.Directory as Dir
 --------------------------------------------
-import Types
+import           RecursionSchemes (Term(..))
+import           Types
 --------------------------------------------
 
 -- | actual dir recursive traversal
@@ -34,7 +35,7 @@ buildDirTree store path fn = do
         then do
           contents <- filter (/= ".") . filter (/= "..") <$> Dir.getDirectoryContents fullpath
           entities <- traverse (buildDirTree store fullpath) contents
-          let (pointer, entity) = lift $ NamedEntity fn $ Node $ fmap htPointer entities
+          let (pointer, entity) = lift $ NamedEntity fn $ Node $ fmap mtPointer entities
           modifyIORef' store (Map.insert pointer entity)
           pure $ In $ Direct pointer entity
       else error $ "invalid file path " ++ fullpath ++ "? wtf yo no symlinks or sockets allowed"
