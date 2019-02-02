@@ -5,13 +5,14 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Render where
+module Merkle.Tree.Render where
 
 --------------------------------------------
 import qualified Text.PrettyPrint as Y
 --------------------------------------------
-import           RecursionSchemes (Algebra, cata)
-import           Types
+import           Util.RecursionSchemes (Algebra, cata)
+import           Merkle.Tree.Types
+import           Merkle.Types (Pointer(..), HashIdentifiedEntity(..))
 --------------------------------------------
 
 showMerkleTree :: MerkleTree -> String
@@ -28,7 +29,7 @@ showMerkleTree' = cata alg
                 , Y.text "]"
                 ]
     alg (Indirect (Pointer hash)) =
-      mconcat [Y.int hash, Y.text "#[ref only]"]
+      mconcat [Y.int hash, Y.text "#[ref]"]
 
 showConcreteMerkleTreeLayer :: ConcreteMerkleTreeLayer -> String
 showConcreteMerkleTreeLayer = Y.render . showMerkleTreeLayer showMerkleTree'

@@ -7,7 +7,6 @@
 
 module Compare (compareMerkleTrees) where
 
-
 --------------------------------------------
 import           Control.Monad (join)
 import qualified Data.HashMap.Strict as Map
@@ -15,9 +14,12 @@ import           Data.HashMap.Strict (HashMap)
 import           Data.IORef
 import qualified Data.Set as Set
 --------------------------------------------
-import           RecursionSchemes (Term(..))
-import           Render
-import           Types
+import           Diff.Types
+import           Util.RecursionSchemes (Term(..))
+import           Util.These (These(..), mapCompare)
+import           Merkle.Tree.Render
+import           Merkle.Tree.Types
+import           Merkle.Types
 --------------------------------------------
 
 -- | fetch a value from the global store. Pretend this involves a network call.
@@ -90,12 +92,12 @@ compareMerkleTrees store ht1 ht2 = do
               let mkByNameMap :: [ConcreteMerkleTreeLayer] -> HashMap Name ConcreteMerkleTreeLayer
                   mkByNameMap ns = Map.fromList $ fmap (\e -> (neName e, e)) ns
 
-                  cmpRes :: [These (Name, ConcreteMerkleTreeLayer)]
+                  cmpRes :: [These (Name, ConcreteMerkleTreeLayer) (Name, ConcreteMerkleTreeLayer)]
                   cmpRes = mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
 
               join <$> traverse resolveMapDiff cmpRes
 
-    resolveMapDiff :: These (Name, ConcreteMerkleTreeLayer)
+    resolveMapDiff :: These (Name, ConcreteMerkleTreeLayer) (Name, ConcreteMerkleTreeLayer)
                    -> IO [Diff]
     resolveMapDiff (This (name,_))     = pure [EntityDeleted name]
     resolveMapDiff (That (name,_))     = pure [EntityCreated name]

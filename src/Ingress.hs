@@ -8,12 +8,14 @@
 module Ingress (buildDirTree) where
 
 --------------------------------------------
+import qualified Data.Hashable as Hash
 import qualified Data.HashMap.Strict as Map
 import           Data.IORef
 import qualified System.Directory as Dir
 --------------------------------------------
-import           RecursionSchemes (Term(..))
-import           Types
+import           Util.RecursionSchemes (Term(..))
+import           Merkle.Tree.Types
+import           Merkle.Types (mtPointer, HashIdentifiedEntity(..), Pointer(..))
 --------------------------------------------
 
 -- | actual dir recursive traversal
@@ -23,19 +25,20 @@ buildDirTree store path fn = do
   let fullpath = path ++ "/" ++ fn
   -- putStrLn $ "run buildDirTree on: " ++ fullpath
   isFile <- Dir.doesFileExist fullpath
-  if isFile
+  entity <- if isFile
     then do
       fc <- readFile fullpath
-      let (pointer, entity) = lift $ NamedEntity fn $ Leaf fc
-      modifyIORef' store (Map.insert pointer entity)
-      pure $ In $ Direct pointer entity
+      pure $ NamedEntity fn $ Leaf fc
     else do
       isDir <- Dir.doesDirectoryExist fullpath
       if isDir
         then do
           contents <- filter (/= ".") . filter (/= "..") <$> Dir.getDirectoryContents fullpath
           entities <- traverse (buildDirTree store fullpath) contents
-          let (pointer, entity) = lift $ NamedEntity fn $ Node $ fmap mtPointer entities
-          modifyIORef' store (Map.insert pointer entity)
-          pure $ In $ Direct pointer entity
+          pure $ NamedEntity fn $ Node $ fmap mtPointer entities
       else error $ "invalid file path " ++ fullpath ++ "? wtf yo no symlinks or sockets allowed"
+
+  let pointer = Pointer . Hash.hash $ entity
+      entity' = makeConcrete entity
+  modifyIORef' store (Map.insert pointer entity')
+  pure $ In $ Direct pointer entity'
