@@ -18,46 +18,62 @@ import           GHC.Generics (Generic)
 type Hash = Int
 type Name = String
 type FileBody = String
-type GlobalStore = IORef (HashMap Pointer (Term (NamedEntity Tree)))
 
+-- merkle tree - can be indirect or concrete
+type MerkleTree = Term (HashIdentifiedEntity (NamedEntity Tree))
+-- | merkle tree layer with sub-nodes of type a
+type MerkleTreeLayer a = NamedEntity Tree a
+-- | merkle tree in which the top layer is known to be substantiated and sub-nodes can be either hash-id'd or direct
+type ConcreteMerkleTreeLayer = MerkleTreeLayer MerkleTree
+
+
+type GlobalStore = IORef (HashMap Pointer ConcreteMerkleTreeLayer)
+
+-- | Pointer to a hash-identified merkle tree node
 newtype Pointer = Pointer { unPointer :: Hash }
   deriving (Eq, Ord, Show, Generic)
 instance Hash.Hashable Pointer
 
+-- | Named entity
 data NamedEntity (f :: * -> *) a = NamedEntity Name (f a) deriving (Eq, Show, Functor)
 
--- note: Node spiritually has a set of children, not a list, but I want a Functor instance
+-- | Tree in which leaf nodes are specialized to String
 data Tree (a :: *) = Node [a] | Leaf String deriving (Eq, Show, Functor)
 
-data Term (f :: * -> *) = In { out :: f (HashTerm f) }
+-- | Fixed-point of type `f`
+data Term (f :: * -> *) = In { out :: f (Term f) }
 
-data HashTerm (f :: * -> *)
-  = Direct   Pointer (Term f) -- node id is included in node metadata of direct ref (pointer)
-  | Indirect Pointer          -- indirect ref is just a pointer in some hash-addressed store
+-- | Some entity (f a) identified by a hash pointer. Can either be a direct or indirect reference
+data HashIdentifiedEntity (f :: * -> *) (a :: *)
+  = Direct   Pointer (f a) -- node id is included in node metadata of direct ref (pointer)
+  | Indirect Pointer       -- indirect ref is just a pointer in some hash-addressed store
 
-htPointer :: HashTerm f -> Pointer
-htPointer (Direct p _) = p
-htPointer (Indirect p) = p
+htPointer :: MerkleTree -> Pointer
+htPointer (In (Direct p _)) = p
+htPointer (In (Indirect p)) = p
 
-showHT :: HashTerm (NamedEntity Tree) -> String
-showHT (Direct p t) = "Direct{ pointer: " ++ show p ++ ", term: " ++ showT t ++ "}"
-showHT (Indirect p) = "Indirect{ pointer: " ++ show p ++ "}"
+-- TODO: pretty printer using 'cata' now that Term is just Term
 
-showT :: Term (NamedEntity Tree) -> String
-showT (In t) = "Term{" ++ showTree t ++ "}"
+-- showHT :: HashIdentifiedEntity (NamedEntity Tree) -> String
+-- showHT (Direct p t) = "Direct{ pointer: " ++ show p ++ ", term: " ++ showT t ++ "}"
+-- showHT (Indirect p) = "Indirect{ pointer: " ++ show p ++ "}"
 
-showTree :: NamedEntity Tree (HashTerm (NamedEntity Tree)) -> String
-showTree (NamedEntity n (Node ns)) = "Node(" ++ n ++ ")(" ++ show (fmap showHT ns) ++ ")"
-showTree (NamedEntity n (Leaf bs)) = "Leaf(" ++ n ++ ")(" ++ show bs ++ ")"
+-- showT :: Term (NamedEntity Tree) -> String
+-- showT (In t) = "Term{" ++ showTree t ++ "}"
+
+-- showTree :: NamedEntity Tree (HashIdentifiedEntity (NamedEntity Tree)) -> String
+-- showTree (NamedEntity n (Node ns)) = "Node(" ++ n ++ ")(" ++ show (fmap showHT ns) ++ ")"
+-- showTree (NamedEntity n (Leaf bs)) = "Leaf(" ++ n ++ ")(" ++ show bs ++ ")"
 
 
 -- | hash to get pointer, basically - builder fn that takes a flat single layer of a tree
 --   and lifts it to produce a direct reference to a pointer-identified tree layer
-lift :: NamedEntity Tree Pointer -> (Pointer, Term (NamedEntity Tree))
-lift e = (Pointer $ hashTree e, (In $ fmap Indirect e))
+-- TODO RENAME
+lift :: MerkleTreeLayer Pointer -> (Pointer, ConcreteMerkleTreeLayer)
+lift e = (Pointer $ hashTree e, (fmap (In . Indirect) e))
 
 -- hash a single merkle tree entry with all subentities represented as hash pointers
-hashTree :: NamedEntity Tree Pointer -> Hash
+hashTree :: MerkleTreeLayer Pointer -> Hash
 hashTree (NamedEntity n (Leaf contents))
   = Hash.hash n `Hash.hashWithSalt` Hash.hash contents
 hashTree (NamedEntity n (Node contents))
