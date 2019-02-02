@@ -26,6 +26,7 @@ executable merkle-dag-compare
                        containers,
                        directory,
                        hashable,
+                       mtl,
                        unordered-containers,
                        pretty
   hs-source-dirs:      src

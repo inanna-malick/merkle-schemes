@@ -9,6 +9,7 @@ module Main where
 
 
 --------------------------------------------
+import           Control.Monad.Except (runExceptT, liftIO)
 import qualified Data.HashMap.Strict as Map
 import           Data.IORef
 --------------------------------------------
@@ -24,11 +25,14 @@ main = do
   after2 <- buildDirTree globalStateStore "examples/after2" "node1"
   after3 <- buildDirTree globalStateStore "examples/after3" "node2"
 
-  putStrLn "comparing before to after1"
-  compareMerkleTrees globalStateStore before after1 >>= print
+  res <- runExceptT $ do
+    liftIO $ putStrLn "comparing before to after1"
+    compareMerkleTrees globalStateStore before after1 >>= liftIO . print
 
-  putStrLn "comparing before to after2"
-  compareMerkleTrees globalStateStore before after2 >>= print
+    liftIO $ putStrLn "comparing before to after2"
+    compareMerkleTrees globalStateStore before after2 >>= liftIO . print
 
-  putStrLn "comparing before to after3"
-  compareMerkleTrees globalStateStore before after3 >>= print
+    liftIO $ putStrLn "comparing before to after3"
+    compareMerkleTrees globalStateStore before after3 >>= liftIO . print
+
+  print res

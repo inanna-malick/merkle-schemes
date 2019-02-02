@@ -8,7 +8,7 @@
 module Compare (compareMerkleTrees) where
 
 --------------------------------------------
-import           Control.Monad (join)
+import           Control.Monad.Except
 import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict (HashMap)
 import           Data.IORef
@@ -22,18 +22,9 @@ import           Merkle.Tree.Types
 import           Merkle.Types
 --------------------------------------------
 
--- | fetch a value from the global store. Pretend this involves a network call.
--- NOTE: could also encode at the type level that this only returns one layer via return type..
-deref :: GlobalStore -> Pointer -> IO ConcreteMerkleTreeLayer
-deref store p = do
-  globalStateStore <- readIORef store
-  putStrLn $ "attempt to deref " ++ show p ++ " via global state store"
-  case Map.lookup p globalStateStore of
-    Nothing -> error "YOLO420"
-    Just x  -> do
-      -- putStrLn $ "returning deref res: " ++ showT x
-      pure x
 
+
+data MyError = HashValidationError | LookupError deriving Show
 
 -- | Compare two merkle trees for equality, producing diffs
 --   lazily fetches structure of the two trees such that only the parts required
@@ -43,9 +34,9 @@ compareMerkleTrees
   :: GlobalStore
   -> MerkleTree
   -> MerkleTree
-  -> IO [Diff]
+  -> ExceptT MyError IO [Diff]
 compareMerkleTrees store ht1 ht2 = do
-  putStrLn $ "compareMerkleTrees: " ++ showMerkleTree ht1 ++ ", " ++ showMerkleTree ht2
+  liftIO $ putStrLn $ "compareMerkleTrees: " ++ showMerkleTree ht1 ++ ", " ++ showMerkleTree ht2
   case (mtPointer ht1 == mtPointer ht2) of
     True  -> pure [] -- no need to explore further here
     False -> do -- hash mismatch - deref and explore further
@@ -55,12 +46,11 @@ compareMerkleTrees store ht1 ht2 = do
 
   where
 
-
     compareDerefed ne1 ne2 = do
-      putStrLn $ "compareDerefed: " ++ showConcreteMerkleTreeLayer ne1 ++ ", " ++ showConcreteMerkleTreeLayer ne2
+      liftIO . putStrLn $ "compareDerefed: " ++ showConcreteMerkleTreeLayer ne1 ++ ", " ++ showConcreteMerkleTreeLayer ne2
       compareDerefed' ne1 ne2
 
-    compareDerefed' :: ConcreteMerkleTreeLayer -> ConcreteMerkleTreeLayer -> IO [Diff]
+    compareDerefed' :: ConcreteMerkleTreeLayer -> ConcreteMerkleTreeLayer -> ExceptT MyError IO [Diff]
     compareDerefed' (NamedEntity name1 entity1) (NamedEntity name2 entity2)
       | name1 /= name2 =
           -- flatten out sub-entities to only contain pointers then check equality
@@ -75,7 +65,7 @@ compareMerkleTrees store ht1 ht2 = do
               | fc1 /= fc2   -> pure [LeafModified (name1, fc1, fc2)]
               -- ASSERTION: we can only get here if there's a hash diff, but
               --            if we have a hash diff then the file contents should differ!?!?
-              | otherwise    -> error "wtf"
+              | otherwise    ->  throwError HashValidationError
             (Node _, Leaf _) -> pure [DirReplacedWithFile name1]
             (Leaf _, Node _) -> pure [FileReplacedWithDir name1]
             (Node ns1, Node ns2) -> do
@@ -98,14 +88,30 @@ compareMerkleTrees store ht1 ht2 = do
               join <$> traverse resolveMapDiff cmpRes
 
     resolveMapDiff :: These (Name, ConcreteMerkleTreeLayer) (Name, ConcreteMerkleTreeLayer)
-                   -> IO [Diff]
+                   -> ExceptT MyError IO [Diff]
     resolveMapDiff (This (name,_))     = pure [EntityDeleted name]
     resolveMapDiff (That (name,_))     = pure [EntityCreated name]
     resolveMapDiff (These (_,a) (_,b)) = compareDerefed a b
 
-    derefOneLayer :: MerkleTree -> IO ConcreteMerkleTreeLayer
+    derefOneLayer :: MerkleTree -> ExceptT MyError IO ConcreteMerkleTreeLayer
     derefOneLayer ht = case out ht of
       Direct _ t -> pure t
       Indirect p -> do
         t <- deref store p
         pure t
+
+
+-- | fetch a value from the global store. Pretend this involves a network call.
+-- NOTE: could also encode at the type level that this only returns one layer via return type..
+deref
+  :: GlobalStore
+  -> Pointer
+  -> ExceptT MyError IO ConcreteMerkleTreeLayer
+deref store p = do
+  globalStateStore <- liftIO $ readIORef store
+  liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via global state store"
+  case Map.lookup p globalStateStore of
+    Nothing -> throwError LookupError
+    Just x  -> do
+      -- putStrLn $ "returning deref res: " ++ showT x
+      pure x
