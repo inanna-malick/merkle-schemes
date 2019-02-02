@@ -5,7 +5,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module RecursionSchemes where
+module Util.RecursionSchemes where
 
 -- | Fixed-point of type `f`
 data Term (f :: * -> *) = In { out :: f (Term f) }
