@@ -17,7 +17,7 @@ import Types
 
 -- | actual dir recursive traversal
 -- ignores permissions in diffs and coerces file contents into unicode #YOLO
-buildDirTree :: GlobalStore -> FilePath -> FilePath -> IO (HashTerm (NamedEntity Tree))
+buildDirTree :: GlobalStore -> FilePath -> FilePath -> IO MerkleTree
 buildDirTree store path fn = do
   let fullpath = path ++ "/" ++ fn
   -- putStrLn $ "run buildDirTree on: " ++ fullpath
@@ -27,7 +27,7 @@ buildDirTree store path fn = do
       fc <- readFile fullpath
       let (pointer, entity) = lift $ NamedEntity fn $ Leaf fc
       modifyIORef' store (Map.insert pointer entity)
-      pure $ Direct pointer entity
+      pure $ In $ Direct pointer entity
     else do
       isDir <- Dir.doesDirectoryExist fullpath
       if isDir
@@ -36,5 +36,5 @@ buildDirTree store path fn = do
           entities <- traverse (buildDirTree store fullpath) contents
           let (pointer, entity) = lift $ NamedEntity fn $ Node $ fmap htPointer entities
           modifyIORef' store (Map.insert pointer entity)
-          pure $ Direct pointer entity
+          pure $ In $ Direct pointer entity
       else error $ "invalid file path " ++ fullpath ++ "? wtf yo no symlinks or sockets allowed"
