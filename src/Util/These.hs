@@ -18,6 +18,12 @@ import           Data.HashMap.Strict (HashMap)
 -- | this, that or these
 data These a b = This a | These a b | That b deriving (Eq, Ord, Show, Functor)
 
+these :: (a -> c) -> (a -> b -> c) -> (b -> c) -> These a b -> c
+these f1 f2 f3 t = case t of
+  This a    -> f1 a
+  These a b -> f2 a b
+  That b    -> f3 b
+
 bimap :: (a -> c) -> (b -> d) -> These a b -> These c d
 bimap f _ (This a) = This $ f a
 bimap f g (These a b) = These (f a) (g b)

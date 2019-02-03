@@ -5,6 +5,10 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 
+
+-- | Code for comparing two merkle trees in which any node can be
+-- either a hash-addressed pointer to an entity in a remote store
+-- or a direct representation of a hash-addressed entity
 module Compare (compareMerkleTrees) where
 
 --------------------------------------------
@@ -16,15 +20,12 @@ import qualified Data.Set as Set
 --------------------------------------------
 import           Diff.Types
 import           Util.RecursionSchemes (Term(..))
-import           Util.These (These(..), mapCompare)
+import           Util.These -- (These(..), mapCompare)
 import           Merkle.Tree.Render
 import           Merkle.Tree.Types
 import           Merkle.Types
 --------------------------------------------
 
-
-
-data MyError = HashValidationError | LookupError deriving Show
 
 -- | Compare two merkle trees for equality, producing diffs
 --   lazily fetches structure of the two trees such that only the parts required
@@ -34,7 +35,7 @@ compareMerkleTrees
   :: GlobalStore
   -> MerkleTree
   -> MerkleTree
-  -> ExceptT MyError IO [Diff]
+  -> ExceptT MerkleTreeCompareError IO [Diff]
 compareMerkleTrees store ht1 ht2 = do
   liftIO $ putStrLn $ "compareMerkleTrees: " ++ showMerkleTree ht1 ++ ", " ++ showMerkleTree ht2
   case (mtPointer ht1 == mtPointer ht2) of
@@ -50,7 +51,7 @@ compareMerkleTrees store ht1 ht2 = do
       liftIO . putStrLn $ "compareDerefed: " ++ showConcreteMerkleTreeLayer ne1 ++ ", " ++ showConcreteMerkleTreeLayer ne2
       compareDerefed' ne1 ne2
 
-    compareDerefed' :: ConcreteMerkleTreeLayer -> ConcreteMerkleTreeLayer -> ExceptT MyError IO [Diff]
+    compareDerefed' :: ConcreteMerkleTreeLayer -> ConcreteMerkleTreeLayer -> ExceptT MerkleTreeCompareError IO [Diff]
     compareDerefed' (NamedEntity name1 entity1) (NamedEntity name2 entity2)
       | name1 /= name2 =
           -- flatten out sub-entities to only contain pointers then check equality
@@ -63,7 +64,7 @@ compareMerkleTrees store ht1 ht2 = do
           case (entity1, entity2) of
             (Leaf fc1, Leaf fc2)
               | fc1 /= fc2   -> pure [LeafModified (name1, fc1, fc2)]
-              -- ASSERTION: we can only get here if there's a hash diff, but
+              -- ASSERTION we can only get here if there's a hash diff, but
               --            if we have a hash diff then the file contents should differ!?!?
               | otherwise    ->  throwError HashValidationError
             (Node _, Leaf _) -> pure [DirReplacedWithFile name1]
@@ -82,18 +83,16 @@ compareMerkleTrees store ht1 ht2 = do
               let mkByNameMap :: [ConcreteMerkleTreeLayer] -> HashMap Name ConcreteMerkleTreeLayer
                   mkByNameMap ns = Map.fromList $ fmap (\e -> (neName e, e)) ns
 
-                  cmpRes :: [These (Name, ConcreteMerkleTreeLayer) (Name, ConcreteMerkleTreeLayer)]
-                  cmpRes = mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
-
-              join <$> traverse resolveMapDiff cmpRes
+              fmap join . traverse resolveMapDiff $ mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
 
     resolveMapDiff :: These (Name, ConcreteMerkleTreeLayer) (Name, ConcreteMerkleTreeLayer)
-                   -> ExceptT MyError IO [Diff]
-    resolveMapDiff (This (name,_))     = pure [EntityDeleted name]
-    resolveMapDiff (That (name,_))     = pure [EntityCreated name]
-    resolveMapDiff (These (_,a) (_,b)) = compareDerefed a b
+                   -> ExceptT MerkleTreeCompareError IO [Diff]
+    resolveMapDiff = these
+      (pure . pure . EntityDeleted . fst)
+      (\(_, a) (_, b) -> compareDerefed a b)
+      (pure . pure . EntityCreated . fst)
 
-    derefOneLayer :: MerkleTree -> ExceptT MyError IO ConcreteMerkleTreeLayer
+    derefOneLayer :: MerkleTree -> ExceptT MerkleTreeCompareError IO ConcreteMerkleTreeLayer
     derefOneLayer ht = case out ht of
       Direct _ t -> pure t
       Indirect p -> do
@@ -106,7 +105,7 @@ compareMerkleTrees store ht1 ht2 = do
 deref
   :: GlobalStore
   -> Pointer
-  -> ExceptT MyError IO ConcreteMerkleTreeLayer
+  -> ExceptT MerkleTreeCompareError IO ConcreteMerkleTreeLayer
 deref store p = do
   globalStateStore <- liftIO $ readIORef store
   liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via global state store"
@@ -115,3 +114,6 @@ deref store p = do
     Just x  -> do
       -- putStrLn $ "returning deref res: " ++ showT x
       pure x
+
+-- | Errors that can occur while comparing two merkle trees
+data MerkleTreeCompareError = HashValidationError | LookupError deriving Show
