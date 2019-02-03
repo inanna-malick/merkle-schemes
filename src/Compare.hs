@@ -15,11 +15,11 @@ module Compare (compareMerkleTrees) where
 import           Control.Monad.Except
 import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict (HashMap)
-import           Data.IORef
 import qualified Data.Set as Set
 --------------------------------------------
+import           Deref
 import           Diff.Types
-import           Util.RecursionSchemes (Term(..))
+import           Errors
 import           Util.These -- (These(..), mapCompare)
 import           Merkle.Tree.Render
 import           Merkle.Tree.Types
@@ -36,13 +36,13 @@ compareMerkleTrees
   -> MerkleTree
   -> MerkleTree
   -> ExceptT MerkleTreeCompareError IO [Diff]
-compareMerkleTrees store ht1 ht2 = do
-  liftIO $ putStrLn $ "compareMerkleTrees: " ++ showMerkleTree ht1 ++ ", " ++ showMerkleTree ht2
-  case (mtPointer ht1 == mtPointer ht2) of
+compareMerkleTrees store mt1 mt2 = do
+  liftIO $ putStrLn $ "compareMerkleTrees: " ++ showMerkleTree mt1 ++ ", " ++ showMerkleTree mt2
+  case (mtPointer mt1 == mtPointer mt2) of
     True  -> pure [] -- no need to explore further here
     False -> do -- hash mismatch - deref and explore further
-      ne1 <- derefOneLayer ht1
-      ne2 <- derefOneLayer ht2
+      ne1 <- derefOneLayer store mt1
+      ne2 <- derefOneLayer store mt2
       compareDerefed ne1 ne2
 
   where
@@ -77,8 +77,8 @@ compareMerkleTrees store ht1 ht2 = do
               let filteredNs1 = filter (not . flip Set.member (ns2Pointers) . mtPointer) ns1
                   filteredNs2 = filter (not . flip Set.member (ns1Pointers) . mtPointer) ns2
 
-              derefedNs1 <- traverse derefOneLayer filteredNs1
-              derefedNs2 <- traverse derefOneLayer filteredNs2
+              derefedNs1 <- traverse (derefOneLayer store) filteredNs1
+              derefedNs2 <- traverse (derefOneLayer store) filteredNs2
 
               let mkByNameMap :: [ConcreteMerkleTreeLayer] -> HashMap Name ConcreteMerkleTreeLayer
                   mkByNameMap ns = Map.fromList $ fmap (\e -> (neName e, e)) ns
@@ -91,29 +91,3 @@ compareMerkleTrees store ht1 ht2 = do
       (pure . pure . EntityDeleted . fst)
       (\(_, a) (_, b) -> compareDerefed a b)
       (pure . pure . EntityCreated . fst)
-
-    derefOneLayer :: MerkleTree -> ExceptT MerkleTreeCompareError IO ConcreteMerkleTreeLayer
-    derefOneLayer ht = case out ht of
-      Direct _ t -> pure t
-      Indirect p -> do
-        t <- deref store p
-        pure t
-
-
--- | fetch a value from the global store. Pretend this involves a network call.
--- NOTE: could also encode at the type level that this only returns one layer via return type..
-deref
-  :: GlobalStore
-  -> Pointer
-  -> ExceptT MerkleTreeCompareError IO ConcreteMerkleTreeLayer
-deref store p = do
-  globalStateStore <- liftIO $ readIORef store
-  liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via global state store"
-  case Map.lookup p globalStateStore of
-    Nothing -> throwError LookupError
-    Just x  -> do
-      -- putStrLn $ "returning deref res: " ++ showT x
-      pure x
-
--- | Errors that can occur while comparing two merkle trees
-data MerkleTreeCompareError = HashValidationError | LookupError deriving Show
