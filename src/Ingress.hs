@@ -7,8 +7,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Ingress (buildDirTree) where
-
+-- todo rename to more generic filestore IO
+module Ingress (buildDirTree, outputDirTree) where
 
 import           Control.Monad.Except
 --------------------------------------------
@@ -17,10 +17,37 @@ import qualified Data.HashMap.Strict as Map
 import           Data.IORef
 import qualified System.Directory as Dir
 --------------------------------------------
+import           Deref
+import           Errors
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
 import           Merkle.Types (HashIdentifiedEntity(..), Pointer(..))
 --------------------------------------------
+
+-- | write tree to file path
+outputDirTree :: GlobalStore -> FilePath -> MerkleTree -> ExceptT MerkleTreeCompareError IO ()
+outputDirTree store path tree = do
+  derefed <- deAnnotateM (derefOneLayer store) tree
+  liftIO $ pushDir path
+  liftIO $ cata alg derefed
+  liftIO $ popDir
+
+  where
+    alg :: Algebra (NamedEntity Tree) (IO ())
+    alg (NamedEntity name (Leaf body))     = writeFile name body
+    alg (NamedEntity name (Node children)) = do
+      mkdir name
+      pushDir name
+      _ <- traverse id children
+      popDir
+
+    mkdir :: FilePath -> IO ()
+    mkdir = undefined
+    popDir :: IO ()
+    popDir = undefined
+    pushDir :: FilePath -> IO ()
+    pushDir = undefined
+
 
 -- | actual dir recursive traversal
 -- ignores permissions in diffs (all file permissions are, idk, that of running process?)
@@ -53,6 +80,7 @@ buildDirTree' = curry (anaButInM alg)
   where
     alg :: MonadicCoAlgebra (ExceptT FileReadError IO) (NamedEntity Tree) (FilePath, FilePath)
     alg (path, filename) = do
+      -- todo: validation of input file path, ideally some 'probefile :: FilePath -> IO FileType' widget
       let fullpath = path ++ "/" ++ filename
       -- putStrLn $ "run buildDirTree on: " ++ fullpath
       isFile <- liftIO $ Dir.doesFileExist fullpath
