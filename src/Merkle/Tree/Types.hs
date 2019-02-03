@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -22,14 +24,14 @@ import           Util.RecursionSchemes (Term(..))
 type Name = String
 
 -- | Tree in which leaf nodes are specialized to String
-data Tree (a :: *) = Node [a] | Leaf String deriving (Eq, Show, Functor)
+data Tree (a :: *) = Node [a] | Leaf String deriving (Eq, Show, Functor, Foldable, Traversable)
 
 -- | Named entity
 data NamedEntity (f :: * -> *) a
   = NamedEntity
   { neName   :: Name
   , neEntity :: f a
-  } deriving (Eq, Show, Functor)
+  } deriving (Eq, Show, Functor, Foldable, Traversable)
 
 -- | named tree node or leaf, parameterized over the type of any sub-nodes
 type MerkleTreeLayer = NamedEntity Tree
