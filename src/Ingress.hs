@@ -22,27 +22,12 @@ import           Merkle.Tree.Types
 import           Merkle.Types (HashIdentifiedEntity(..), Pointer(..))
 --------------------------------------------
 
--- | A coalgebra, but everything's in some arbitrary monad stack? wild.
-type MonadicCoAlgebra m f a = a -> m (f a)
-
--- | An anamorphism, but everything's in some arbitrary monad stack? wild.
-anaButInM :: (Traversable f, Monad m) => MonadicCoAlgebra m f a -> a -> m (Term f)
-anaButInM alg = fmap In . (>>= traverse (anaButInM alg)) . alg
-
-type MonadicAnnotaterAlg m f g
-  = f (Term (g f)) -> m (Term (g f))
-
-annotateWithLayer :: (Traversable f, Monad m) => MonadicAnnotaterAlg m f g -> Term f -> m (Term (g f))
-annotateWithLayer alg = (>>= alg) . traverse (annotateWithLayer alg) . out
-
-
 -- | actual dir recursive traversal
 -- ignores permissions in diffs (all file permissions are, idk, that of running process?)
 -- and coerces file contents into unicode #YOLO. Reads directory structure into memory
 -- and annotates nodes with their hashes
 buildDirTree :: GlobalStore -> FilePath -> FilePath -> ExceptT FileReadError IO MerkleTree
 buildDirTree store path filename = buildDirTree' path filename >>= (liftIO . addDirTreeToStore store)
-
 
 -- | annotate tree nodes with hash, adding them to some global store during this traversal
 addDirTreeToStore
