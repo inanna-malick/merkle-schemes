@@ -21,9 +21,11 @@ import           Deref
 import           Diff.Types
 import           Errors
 import           Util.These -- (These(..), mapCompare)
+import           Util.Util (mapErrUtil)
 import           Merkle.Tree.Render
 import           Merkle.Tree.Types
 import           Merkle.Types
+import           Store
 --------------------------------------------
 
 
@@ -32,7 +34,7 @@ import           Merkle.Types
 --   to do this comparison are fetched from the global state store (via 'network call')
 -- TODO: hang on to full tree as fetched and log after?
 compareMerkleTrees
-  :: GlobalStore
+  :: Store (ExceptT MerkleTreeLookupError IO)
   -> MerkleTree
   -> MerkleTree
   -> ExceptT MerkleTreeCompareError IO [Diff]
@@ -41,12 +43,11 @@ compareMerkleTrees store mt1 mt2 = do
   case (mtPointer mt1 == mtPointer mt2) of
     True  -> pure [] -- no need to explore further here
     False -> do -- hash mismatch - deref and explore further
-      ne1 <- derefOneLayer store mt1
-      ne2 <- derefOneLayer store mt2
+      ne1 <- mapErrUtil LookupError $ derefOneLayer store mt1
+      ne2 <- mapErrUtil LookupError $ derefOneLayer store mt2
       compareDerefed ne1 ne2
 
   where
-
     compareDerefed ne1 ne2 = do
       liftIO . putStrLn $ "compareDerefed: " ++ showConcreteMerkleTreeLayer ne1 ++ ", " ++ showConcreteMerkleTreeLayer ne2
       compareDerefed' ne1 ne2
@@ -77,8 +78,8 @@ compareMerkleTrees store mt1 mt2 = do
               let filteredNs1 = filter (not . flip Set.member (ns2Pointers) . mtPointer) ns1
                   filteredNs2 = filter (not . flip Set.member (ns1Pointers) . mtPointer) ns2
 
-              derefedNs1 <- traverse (derefOneLayer store) filteredNs1
-              derefedNs2 <- traverse (derefOneLayer store) filteredNs2
+              derefedNs1 <- mapErrUtil LookupError $ traverse (derefOneLayer store) filteredNs1
+              derefedNs2 <- mapErrUtil LookupError $ traverse (derefOneLayer store) filteredNs2
 
               let mkByNameMap :: [ConcreteMerkleTreeLayer] -> HashMap Name ConcreteMerkleTreeLayer
                   mkByNameMap ns = Map.fromList $ fmap (\e -> (neName e, e)) ns
@@ -91,3 +92,5 @@ compareMerkleTrees store mt1 mt2 = do
       (pure . pure . EntityDeleted . fst)
       (\(_, a) (_, b) -> compareDerefed a b)
       (pure . pure . EntityCreated . fst)
+
+

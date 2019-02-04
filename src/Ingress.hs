@@ -10,24 +10,27 @@
 -- todo rename to more generic filestore IO
 module Ingress (buildDirTree, outputDirTree) where
 
-import           Control.Monad.Trans.State.Lazy
-import           Control.Monad.Except
 --------------------------------------------
+import           Control.Monad.Except
+import           Control.Monad.Trans.State.Lazy
 import qualified Data.List as List
-import qualified Data.Hashable as Hash
-import qualified Data.HashMap.Strict as Map
-import           Data.IORef
+import           Data.Functor.Compose (Compose(..))
 import qualified System.Directory as Dir
 --------------------------------------------
 import           Deref
-import           Errors
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
-import           Merkle.Types (HashIdentifiedEntity(..), Pointer(..))
+import           Merkle.Types (HashIdentifiedEntity(..))
+import           Store
 --------------------------------------------
 
 -- | write tree to file path
-outputDirTree :: GlobalStore -> FilePath -> MerkleTree -> ExceptT MerkleTreeCompareError IO ()
+outputDirTree
+  :: MonadIO m
+  => Store m
+  -> FilePath
+  -> MerkleTree
+  -> m ()
 outputDirTree store outdir tree = do
   derefed <- deAnnotateM (derefOneLayer store) tree
   liftIO $ evalStateT (cata alg derefed) [outdir]
@@ -53,33 +56,49 @@ outputDirTree store outdir tree = do
 -- ignores permissions in diffs (all file permissions are, idk, that of running process?)
 -- and coerces file contents into unicode #YOLO. Reads directory structure into memory
 -- and annotates nodes with their hashes
-buildDirTree :: GlobalStore -> FilePath -> FilePath -> ExceptT FileReadError IO MerkleTree
-buildDirTree store path filename = buildDirTree' path filename >>= (liftIO . addDirTreeToStore store)
+buildDirTree
+  :: MonadIO m
+  => Store m
+  -> FilePath
+  -> FilePath
+  -> m MerkleTree
+buildDirTree store path filename
+    = addDirTreeToStore store $ buildDirTree' path filename
 
 -- | annotate tree nodes with hash, adding them to some global store during this traversal
+-- NOTE: fully consumes potentially-infinite effectful stream and may not terminate
 addDirTreeToStore
-  :: GlobalStore
-  -> Term (NamedEntity Tree)
-  -> IO MerkleTree
-addDirTreeToStore store = annotateWithLayer alg
+  :: forall m
+   . Monad m
+  => Store m
+  -> Term (Compose m (NamedEntity Tree))
+  -> m MerkleTree
+addDirTreeToStore store = cata alg
   where
-    alg :: MonadicAnnotaterAlg IO (NamedEntity Tree) HashIdentifiedEntity
-    alg entity = do
-      let pointer = Pointer . Hash.hash $ makeShallow entity
-      modifyIORef' store (Map.insert pointer entity)
+    alg :: Algebra (Compose m (NamedEntity Tree)) (m MerkleTree)
+    alg getEntity = do
+      (NamedEntity name entity') <- getCompose $ getEntity
+      entity <- NamedEntity name <$> case entity' of
+        Leaf body -> pure $ Leaf body
+        Node children -> do
+          children' <- traverse id children
+          pure $ Node children'
+      pointer <- uploadShallow store $ makeShallow entity
       pure $ In $ Direct pointer entity
 
 buildDirTree'
-  :: FilePath
+  :: forall m
+   . MonadIO m
+  => FilePath
   -> FilePath
   -- tree structure _without_ pointer annotation
   -- type-level guarantee that there is no hash identified
   -- entity indirection allowed here
-  -> ExceptT FileReadError IO (Term (NamedEntity Tree))
-buildDirTree' = curry (anaButInM alg)
+  -> Term (Compose m (NamedEntity Tree))
+buildDirTree' = curry (ana alg)
   where
-    alg :: MonadicCoAlgebra (ExceptT FileReadError IO) (NamedEntity Tree) (FilePath, FilePath)
-    alg (path, filename) = do
+    alg :: CoAlgebra (Compose m (NamedEntity Tree)) (FilePath, FilePath)
+    alg (path, filename) = Compose $ do
       -- todo: validation of input file path, ideally some 'probefile :: FilePath -> IO FileType' widget
       let fullpath = path ++ "/" ++ filename
       -- putStrLn $ "run buildDirTree on: " ++ fullpath
@@ -99,8 +118,4 @@ buildDirTree' = curry (anaButInM alg)
                       )
                . liftIO
                $ Dir.getDirectoryContents fullpath
-            else throwError (FileReadError fullpath)
-
-
-data FileReadError = FileReadError FilePath -- tried to read this path but failed (todo better errors? idk lol)
-  deriving (Show)
+            else fail ("file read error: unexpected type at " ++ fullpath)

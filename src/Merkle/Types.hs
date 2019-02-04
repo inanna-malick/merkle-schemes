@@ -11,6 +11,7 @@
 module Merkle.Types where
 
 --------------------------------------------
+import           Data.Aeson
 import qualified Data.Hashable as Hash
 import           GHC.Generics (Generic)
 --------------------------------------------
@@ -33,3 +34,12 @@ data HashIdentifiedEntity (f :: * -> *) (a :: *)
 mtPointer :: Term (HashIdentifiedEntity f) -> Pointer
 mtPointer (In (Direct p _)) = p
 mtPointer (In (Indirect p)) = p
+
+instance FromJSON Pointer where
+    -- this generates a Value
+    parseJSON js = Pointer <$> parseJSON js
+
+instance ToJSON Pointer where
+    -- this generates a Value
+    toJSON (Pointer p) =
+        toJSON p
