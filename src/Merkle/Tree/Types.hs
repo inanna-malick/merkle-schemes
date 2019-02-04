@@ -9,13 +9,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Merkle.Tree.Types where
 
 --------------------------------------------
+import           Data.Aeson
 import qualified Data.Hashable as Hash
 import           Data.HashMap.Strict (HashMap)
 import           Data.IORef
+import           Data.Text
 --------------------------------------------
 import           Merkle.Types (Pointer(..), HashIdentifiedEntity(..), mtPointer)
 import           Util.RecursionSchemes (Term(..))
@@ -52,10 +55,36 @@ instance Hash.Hashable ShallowMerkleTreeLayer where
   hashWithSalt s (NamedEntity n (Node contents))
     = s `Hash.hashWithSalt` Hash.hash n `Hash.hashWithSalt` Hash.hash contents
 
+instance ToJSON ShallowMerkleTreeLayer where
+    -- this generates a Value
+    toJSON (NamedEntity name (Leaf body)) =
+        object ["type" .= ("leaf" :: Text), "name" .= pack name, "body" .= pack body]
+    toJSON (NamedEntity name (Node pointers)) =
+        object ["type" .= ("node" :: Text), "name" .= pack name, "children" .= toJSON pointers]
+
+instance FromJSON ShallowMerkleTreeLayer where
+    parseJSON = withObject "ShallowMerkleTreeLayer" $ \v -> do
+        name <- v .: "name"
+        typ  <- v .: "type"
+        case typ of
+          "node" -> do
+              children <- v .: "children"
+              pure $ NamedEntity name $ Node children
+          "leaf" -> do
+              body <- v .: "body"
+              pure $ NamedEntity name $ Leaf body
+          x -> fail $ "unsupported node type " ++ x
+
+
+
+-- | Forget information at the term level - drop any direct references
 makeShallow :: ConcreteMerkleTreeLayer -> ShallowMerkleTreeLayer
 makeShallow = fmap mtPointer
 
+-- | Forget information at the type level
+--   turn a value known to be shallow to a potentially-deep one
 makeConcrete :: ShallowMerkleTreeLayer -> ConcreteMerkleTreeLayer
 makeConcrete = fmap (In . Indirect)
+
 
 type GlobalStore = IORef (HashMap Pointer ConcreteMerkleTreeLayer)
