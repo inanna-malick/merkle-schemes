@@ -14,7 +14,7 @@ import qualified Data.HashMap.Strict as Map
 import           Data.IORef
 --------------------------------------------
 import           Compare (compareMerkleTrees)
-import           Ingress (buildDirTree)
+import           Ingress (buildDirTree, outputDirTree)
 import           Merkle.Types (mtPointer, HashIdentifiedEntity(Indirect))
 import           Util.RecursionSchemes (Term(In))
 --------------------------------------------
@@ -40,6 +40,8 @@ main = do
 
       liftIO $ putStrLn "comparing before to after3"
       compareMerkleTrees globalStateStore before after3 >>= liftIO . print
+
+      outputDirTree globalStateStore "tmp" after3
 
     liftIO $ print res
   print res'

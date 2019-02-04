@@ -10,8 +10,10 @@
 -- todo rename to more generic filestore IO
 module Ingress (buildDirTree, outputDirTree) where
 
+import           Control.Monad.Trans.State.Lazy
 import           Control.Monad.Except
 --------------------------------------------
+import qualified Data.List as List
 import qualified Data.Hashable as Hash
 import qualified Data.HashMap.Strict as Map
 import           Data.IORef
@@ -26,27 +28,25 @@ import           Merkle.Types (HashIdentifiedEntity(..), Pointer(..))
 
 -- | write tree to file path
 outputDirTree :: GlobalStore -> FilePath -> MerkleTree -> ExceptT MerkleTreeCompareError IO ()
-outputDirTree store path tree = do
+outputDirTree store outdir tree = do
   derefed <- deAnnotateM (derefOneLayer store) tree
-  liftIO $ pushDir path
-  liftIO $ cata alg derefed
-  liftIO $ popDir
+  liftIO $ evalStateT (cata alg derefed) [outdir]
 
   where
-    alg :: Algebra (NamedEntity Tree) (IO ())
-    alg (NamedEntity name (Leaf body))     = writeFile name body
+    alg :: Algebra (NamedEntity Tree) (StateT [FilePath] IO ())
+    alg (NamedEntity name (Leaf body))     = do
+      path <- List.intercalate "/" . reverse . (name:) <$> get
+      liftIO $ writeFile path body
     alg (NamedEntity name (Node children)) = do
-      mkdir name
-      pushDir name
+      path <- List.intercalate "/" . reverse . (name:) <$> get
+      liftIO $ Dir.createDirectory path
+      modify (push name)
       _ <- traverse id children
-      popDir
+      modify pop
 
-    mkdir :: FilePath -> IO ()
-    mkdir = undefined
-    popDir :: IO ()
-    popDir = undefined
-    pushDir :: FilePath -> IO ()
-    pushDir = undefined
+    push x xs = x:xs
+    pop (_:xs)  = xs
+    pop []    = []
 
 
 -- | actual dir recursive traversal
