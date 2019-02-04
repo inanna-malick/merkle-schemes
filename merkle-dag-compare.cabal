@@ -28,6 +28,7 @@ executable merkle-dag-compare
                        hashable,
                        mtl,
                        unordered-containers,
-                       pretty
+                       pretty,
+                       transformers
   hs-source-dirs:      src
   default-language:    Haskell2010
