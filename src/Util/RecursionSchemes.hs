@@ -72,3 +72,20 @@ deAnnotateM
   -> Term (g f)
   -> m (Term f)
 deAnnotateM alg = fmap In . (>>= traverse (deAnnotateM alg)) . alg
+
+data CoAttr f a
+  = Automatic a
+  | Manual (f (CoAttr f a))
+  -- deriving Functor
+
+type CVCoAlgebra f a = a -> f (CoAttr f a)
+
+futu :: forall f a . Functor f => CVCoAlgebra f a -> a -> Term f
+futu f = In . fmap worker . f
+  where
+    worker :: CoAttr f a -> Term f
+    worker (Automatic a) = futu f a        -- continue through this level
+    worker (Manual g) = In (fmap worker g) -- omit folding this level,
+                                           -- delegating to the worker
+                                           -- to perform any needed
+                                           -- unfolds later on.
