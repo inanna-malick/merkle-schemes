@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PolyKinds #-}
 
 module Store where
 
@@ -27,9 +28,9 @@ data Store m
   = Store
   { -- return type being 'Concrete' instead of 'Shallow' allows possible optimization:
     -- returning multiple layers at once based on (eg) past usage patterns
-    deref :: Pointer -> m ConcreteMerkleTreeLayer
+    deref :: Pointer -> m $ NamedTreeLayer MerkleTree
     -- this allows for each store to use its own hash algorithm - not sure if I like that
-  , uploadShallow :: (NamedEntity :+ Tree) Pointer -> m Pointer
+  , uploadShallow :: NamedTreeLayer Pointer -> m Pointer
   }
 
 
@@ -50,12 +51,12 @@ createTmpDir prefix = do
   putStrLn $ "created temp dir: " ++ dir
   pure dir
 
-tmpFsStore :: IO (Store (ExceptT MerkleTreeLookupError IO))
+tmpFsStore :: IO $ Store $ ExceptT MerkleTreeLookupError IO
 tmpFsStore = do
   dir <- createTmpDir "merklestore"
   pure $ fsStore dir
 
-fsStore :: FilePath -> Store (ExceptT MerkleTreeLookupError IO)
+fsStore :: FilePath -> Store $ ExceptT MerkleTreeLookupError IO
 fsStore root
   = Store
   { deref = \p -> do
@@ -78,7 +79,7 @@ fsStore root
 
 
 
-iorefStore :: IORef (HashMap Pointer ((NamedEntity :+ Tree) Pointer))
+iorefStore :: IORef $ HashMap Pointer $ NamedTreeLayer Pointer
            -> Store (ExceptT MerkleTreeLookupError IO)
 iorefStore ioref
   = Store

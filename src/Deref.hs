@@ -23,10 +23,11 @@ strictDeref
    . Monad m
   => Store m
   -> Pointer
-  -> m (Term HashAnnotatedTree)
+  -> m $ Term (WithHash :+ NamedTreeLayer)
 strictDeref store = cata alg . lazyDeref store
   where
-    alg :: Algebra (HashAnnotatedEffectfulStreamF m) (m (Term HashAnnotatedTree))
+    alg :: Algebra (WithHash :+ m :+ NamedTreeLayer)
+                   (m $ Term (WithHash :+ NamedTreeLayer))
     alg (C (p, C e)) =
       do
         e' <- e
@@ -42,10 +43,11 @@ lazyDeref
    . Monad m
   => Store m
   -> Pointer
-  -> Term (HashAnnotatedEffectfulStreamF m)
+  -> Term (WithHash :+ m :+ NamedTreeLayer)
 lazyDeref store = futu alg
   where
-    alg :: CVCoAlgebra ((,) Pointer :+ m :+ NamedEntity :+ Tree) Pointer
+    alg :: CVCoAlgebra (WithHash :+ m :+ NamedTreeLayer)
+                       (Pointer)
     alg p = C (p, C $ handleCMTL <$> deref store p)
 
     handleCMTL (C (NamedEntity name e))
@@ -54,36 +56,32 @@ lazyDeref store = futu alg
     handleMTL (In (C (Direct p e))) = Manual $ C (p, C . pure $ handleCMTL e)
     handleMTL (In (C (Indirect p))) = Automatic p
 
-type PartiallyExpandedHashAnnotatedTree
-  = Term PartiallyExpandedHashAnnotatedTreeF
-
-type PartiallyExpandedHashAnnotatedTreeF
-  = (,) Pointer :+ Maybe :+ NamedEntity :+ Tree
-
 unexpanded
   :: Pointer
-  -> PartiallyExpandedHashAnnotatedTree
+  -> Term (WithHash :+ Maybe :+ NamedTreeLayer)
 unexpanded p = In $ C (p, C Nothing)
 
 expanded
-  :: (NamedEntity :+ Tree) PartiallyExpandedHashAnnotatedTree
+  :: NamedTreeLayer $ Term (WithHash :+ Maybe :+ NamedTreeLayer)
   -> Pointer
-  -> PartiallyExpandedHashAnnotatedTree
+  -> Term (WithHash :+ Maybe :+ NamedTreeLayer)
 expanded x p = In $ C (p, C $ Just x)
 
 -- todo better name?
 expandedShallow
   :: forall g
-   . (NamedEntity :+ Tree) (Term ((,) Pointer :+ g))
+   . NamedTreeLayer $ (Term (WithHash :+ g))
   -> Pointer
-  -> PartiallyExpandedHashAnnotatedTree
+  -> Term (WithHash :+ Maybe :+ NamedTreeLayer)
 expandedShallow x = expanded (fmap (\(In (C (p,_))) -> In $ C (p, C Nothing)) x)
 
-type HashAnnotatedTree
-  = (,) Pointer :+ NamedEntity :+ Tree
+-- todo: rename?
+haesfPointer :: forall f . Term (WithHash :+ f) -> Pointer
+haesfPointer = fst . getCompose . out
 
-type HashAnnotatedEffectfulStreamF m
-  = (,) Pointer :+ m :+ NamedEntity :+ Tree
+-- compelling argument for type aliases right here
+haesfDeref :: Term (WithHash :+ m :+ NamedTreeLayer)
+            -> m $ NamedTreeLayer (Term (WithHash :+ m :+ NamedTreeLayer))
+haesfDeref   = getCompose . snd . getCompose . out
 
-type HashAnnotatedEffectfulStreamLayer m
-  = (NamedEntity :+ Tree) (Term (HashAnnotatedEffectfulStreamF m))
+type WithHash = (,) Pointer
