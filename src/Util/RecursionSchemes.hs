@@ -10,7 +10,6 @@ cata f = f . fmap (cata f) . unFix
 
 type CoAlgebra f a = a -> f a
 
--- | An anamorphism, but everything's in some arbitrary monad stack? wild.
 ana
   :: (Functor f)
   => CoAlgebra f a
