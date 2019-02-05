@@ -72,7 +72,7 @@ fsStore root
 
 -- | Store backed by in-memory IORef HashMap
 iorefStore :: IORef $ HashMap Pointer $ NamedTreeLayer Pointer
-           -> Store (ExceptT MerkleTreeLookupError IO)
+           -> Store $ ExceptT MerkleTreeLookupError IO
 iorefStore ioref
   = Store
   { deref = \p -> do

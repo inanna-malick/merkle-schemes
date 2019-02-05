@@ -32,8 +32,8 @@ compareMerkleTrees
   -> Pointer -- top level interface is just pointers!
   -> m ( [Diff] -- resulting diffs
        -- partially substantiated trees - can be used to track how far tree traversal went
-       , ( Fix (WithHash :+ Maybe :+ NamedTreeLayer)
-         , Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+       , ( Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+         , Fix $ WithHash :+ Maybe :+ NamedTreeLayer
          )
        )
 compareMerkleTrees store mt1 mt2 =
@@ -49,11 +49,11 @@ compareMerkleTrees'
   -- no knowledge about actual monad stack - just knows it can
   -- sequence actions in it to deref successive layers (because monad)
    . Monad m
-  => Fix (WithHash :+ m :+ NamedTreeLayer)
-  -> Fix (WithHash :+ m :+ NamedTreeLayer)
+  => Fix $ WithHash :+ m :+ NamedTreeLayer
+  -> Fix $ WithHash :+ m :+ NamedTreeLayer
   -> m ( [Diff]
-       , ( Fix (WithHash :+ Maybe :+ NamedTreeLayer)
-         , Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+       , ( Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+         , Fix $ WithHash :+ Maybe :+ NamedTreeLayer
          )
        )
 compareMerkleTrees' t1 t2
@@ -68,26 +68,30 @@ compareMerkleTrees' t1 t2
 
   where
     compareDerefed
-      :: NamedTreeLayer $ Fix (WithHash :+ m :+ NamedTreeLayer)
-      -> NamedTreeLayer $ Fix (WithHash :+ m :+ NamedTreeLayer)
+      :: NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer
+      -> NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer
       -> m ( [Diff]
            -- functions used to build up structure - in this fn we have no access to pointers (having already checked ==)
-           , ( Pointer -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
-             , Pointer -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+           , ( Pointer -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+             , Pointer -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
              )
            )
     compareDerefed ne1@(C (NamedEntity name1 entity1)) ne2@(C (NamedEntity name2 entity2))
       | name1 /= name2 = do
+          -- expansion for the case in which neither node is derefed or explored
+          let shallowExpansion = (expandedShallow ne1, expandedShallow ne2)
           -- flatten out sub-entities to only contain pointers then check equality
           if (fmap haesfPointer entity1 == fmap haesfPointer entity2)
             then
-              pure ([EntityRenamed name1 name2], (expandedShallow ne1, expandedShallow ne2))
+              pure ([EntityRenamed name1 name2], shallowExpansion)
             else
-              pure ([EntityDeleted name1, EntityCreated name2], (expandedShallow ne1, expandedShallow ne2))
-      | otherwise = -- no name mismatch, but known hash mismatch - must explore further
+              pure ([EntityDeleted name1, EntityCreated name2], shallowExpansion)
+      | otherwise = do -- no name mismatch, but known hash mismatch - must explore further
+          -- expansion for the case in which neither node is derefed or explored
+          let shallowExpansion = (expandedShallow ne1, expandedShallow ne2)
           case (entity1, entity2) of
             (Leaf fc1, Leaf fc2)
-              | fc1 /= fc2   -> pure ([LeafModified (name1, fc1, fc2)], (expandedShallow ne1, expandedShallow ne2))
+              | fc1 /= fc2   -> pure ([LeafModified (name1, fc1, fc2)], shallowExpansion)
               -- ASSERTION we can only get here if there's a hash diff, but
               --            if we have a hash diff then the file contents should differ!?!?
               -- NOTE: this indicates a situation where two hashes are /= but the hash-addressed
@@ -96,8 +100,8 @@ compareMerkleTrees' t1 t2
               --       would require some additional error type that I don't want to think about
               --       right now
               | otherwise    -> pure ([], (unexpanded, unexpanded))
-            (Node _, Leaf _) -> pure ([DirReplacedWithFile name1], (expandedShallow ne1, expandedShallow ne2))
-            (Leaf _, Node _) -> pure ([FileReplacedWithDir name1], (expandedShallow ne2, expandedShallow ne1))
+            (Node _, Leaf _) -> pure ([DirReplacedWithFile name1], shallowExpansion)
+            (Leaf _, Node _) -> pure ([FileReplacedWithDir name1], shallowExpansion)
             (Node ns1, Node ns2) -> do
               let ns1Pointers = Set.fromList $ fmap haesfPointer ns1
                   ns2Pointers = Set.fromList $ fmap haesfPointer ns2
@@ -106,18 +110,18 @@ compareMerkleTrees' t1 t2
               let exploredNs1 = filter (not . flip Set.member (ns2Pointers) . haesfPointer) ns1
                   exploredNs2 = filter (not . flip Set.member (ns1Pointers) . haesfPointer) ns2
                   -- for construting 'unexpanded' branches
-                  unexploredNs1 :: [Fix (WithHash :+ Maybe :+ NamedTreeLayer)]
+                  unexploredNs1 :: [Fix $ WithHash :+ Maybe :+ NamedTreeLayer]
                   unexploredNs1  = fmap (unexpanded . haesfPointer) $ filter (flip Set.member (ns2Pointers) . haesfPointer) ns1
-                  unexploredNs2 :: [Fix (WithHash :+ Maybe :+ NamedTreeLayer)]
+                  unexploredNs2 :: [Fix $ WithHash :+ Maybe :+ NamedTreeLayer]
                   unexploredNs2  = fmap (unexpanded . haesfPointer) $ filter (flip Set.member (ns1Pointers) . haesfPointer) ns2
 
               derefedNs1 <- traverse (\x -> fmap C . fmap (haesfPointer x,) $ haesfDeref x) exploredNs1
               derefedNs2 <- traverse (\x -> fmap C . fmap (haesfPointer x,) $ haesfDeref x) exploredNs2
 
               -- MAIN PROBLEM: layer + term type is fucking ungainly, ugly
-              let mkByNameMap :: [WithHash :+ NamedTreeLayer $ Fix (WithHash :+ m :+ NamedTreeLayer)]
+              let mkByNameMap :: [WithHash :+ NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer]
                               -> HashMap Name $ WithHash :+ NamedTreeLayer
-                                              $ Fix (WithHash :+ m :+ NamedTreeLayer)
+                                              $ Fix $ WithHash :+ m :+ NamedTreeLayer
                   mkByNameMap ns = Map.fromList $ fmap (\e@(C (_, C (NamedEntity n _))) -> (n, e)) ns
                   resolveMapDiff t = case t of -- todo lambdacase
                     This (n,_) -> pure ( [EntityDeleted n]
@@ -152,13 +156,13 @@ compareMerkleTrees' t1 t2
 
 unexpanded
   :: Pointer
-  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+  -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
 unexpanded p = Fix $ C (p, C Nothing)
 
 expanded
-  :: NamedTreeLayer $ Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+  :: NamedTreeLayer $ Fix $ WithHash :+ Maybe :+ NamedTreeLayer
   -> Pointer
-  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+  -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
 expanded x p = Fix $ C (p, C $ Just x)
 
 -- todo better name?
@@ -166,5 +170,5 @@ expandedShallow
   :: forall g
    . NamedTreeLayer $ (Fix (WithHash :+ g))
   -> Pointer
-  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+  -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
 expandedShallow x = expanded (fmap (\(Fix (C (p,_))) -> Fix $ C (p, C Nothing)) x)

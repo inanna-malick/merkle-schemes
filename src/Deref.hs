@@ -17,7 +17,7 @@ strictDeref
    . Monad m
   => Store m
   -> Pointer
-  -> m $ Fix (WithHash :+ NamedTreeLayer)
+  -> m $ Fix $ WithHash :+ NamedTreeLayer
 strictDeref store = cata alg . lazyDeref store
   where
     alg :: Algebra (WithHash :+ m :+ NamedTreeLayer)
@@ -33,7 +33,7 @@ lazyDeref
    . Monad m
   => Store m
   -> Pointer
-  -> Fix (WithHash :+ m :+ NamedTreeLayer)
+  -> Fix $ WithHash :+ m :+ NamedTreeLayer
 lazyDeref store = futu alg
   where
     alg :: CVCoAlgebra (WithHash :+ m :+ NamedTreeLayer)
@@ -47,12 +47,12 @@ lazyDeref store = futu alg
     handleMTL (Fix (C (Indirect p))) = Automatic p
 
 -- todo: rename?
-haesfPointer :: forall f . Fix (WithHash :+ f) -> Pointer
+haesfPointer :: forall f . Fix $ WithHash :+ f -> Pointer
 haesfPointer = fst . getCompose . unFix
 
--- compelling argument for type aliases right here
-haesfDeref :: Fix (WithHash :+ m :+ NamedTreeLayer)
-            -> m $ NamedTreeLayer (Fix (WithHash :+ m :+ NamedTreeLayer))
+-- todo: rename?
+haesfDeref :: Fix $ WithHash :+ m :+ NamedTreeLayer
+           -> m $ NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer
 haesfDeref   = getCompose . snd . getCompose . unFix
 
 type WithHash = (,) Pointer
