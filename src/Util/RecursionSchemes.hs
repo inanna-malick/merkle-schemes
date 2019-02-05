@@ -76,7 +76,6 @@ deAnnotateM alg = fmap In . (>>= traverse (deAnnotateM alg)) . alg
 data CoAttr f a
   = Automatic a
   | Manual (f (CoAttr f a))
-  -- deriving Functor
 
 type CVCoAlgebra f a = a -> f (CoAttr f a)
 

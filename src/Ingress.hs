@@ -20,7 +20,7 @@ import qualified System.Directory as Dir
 import           Deref
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
-import           Merkle.Types (HashIdentifiedEntity(..))
+import           Merkle.Types (Pointer, HashIdentifiedEntity(..))
 import           Store
 --------------------------------------------
 
@@ -29,18 +29,18 @@ outputDirTree
   :: MonadIO m
   => Store m
   -> FilePath
-  -> MerkleTree
+  -> Pointer
   -> m ()
-outputDirTree store outdir tree = do
-  derefed <- deAnnotateM (derefOneLayer store) tree
+outputDirTree store outdir pointer = do
+  derefed <- strictDeref store pointer
   liftIO $ evalStateT (cata alg derefed) [outdir]
 
   where
-    alg :: Algebra (NamedEntity Tree) (StateT [FilePath] IO ())
-    alg (NamedEntity name (Leaf body))     = do
+    alg :: Algebra (Compose ((,) Pointer) (NamedEntity Tree)) (StateT [FilePath] IO ())
+    alg (Compose (_p, (NamedEntity name (Leaf body))))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
-    alg (NamedEntity name (Node children)) = do
+    alg (Compose (_p, (NamedEntity name (Node children)))) = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ Dir.createDirectory path
       modify (push name)

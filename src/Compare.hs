@@ -21,11 +21,9 @@ import qualified Data.Set as Set
 --------------------------------------------
 import           Deref
 import           Diff.Types
-import           Errors
 import           Util.These -- (These(..), mapCompare)
-import           Util.Util (mapErrUtil)
 import           Util.RecursionSchemes
-import           Merkle.Tree.Render
+-- import           Merkle.Tree.Render
 import           Merkle.Tree.Types
 import           Merkle.Types
 import           Store
@@ -42,7 +40,7 @@ compareMerkleTrees'
   -> m [Diff]
 compareMerkleTrees' t1 t2
   | haesfPointer t1 == haesfPointer t2
-      = pure [] -- no need to explore further here
+      = pure [] -- no diff, no need to explore further here
   | otherwise
       = do deref1 <- haesfDeref t1
            deref2 <- haesfDeref t2
@@ -80,16 +78,26 @@ compareMerkleTrees' t1 t2
                   ns2Pointers = Set.fromList $ fmap haesfPointer ns2
 
               -- DECISION: order of node children doesn't matter, so drop down to Set here
-              let filteredNs1 = filter (not . flip Set.member (ns2Pointers) . haesfPointer) ns1
-                  filteredNs2 = filter (not . flip Set.member (ns1Pointers) . haesfPointer) ns2
+              let exploredNs1 = filter (not . flip Set.member (ns2Pointers) . haesfPointer) ns1
+                  exploredNs2 = filter (not . flip Set.member (ns1Pointers) . haesfPointer) ns2
+                  -- for construting 'unexpanded' branches
+                  -- unexploredNs1  = fmap (unexpanded . haesfPointer) . filter (flip Set.member (ns2Pointers) . haesfPointer) ns1
+                  -- unexploredNs2  = fmap (unexpanded . haesfPointer) . filter (flip Set.member (ns1Pointers) . haesfPointer) ns2
 
-              derefedNs1 <- traverse haesfDeref filteredNs1
-              derefedNs2 <- traverse haesfDeref filteredNs2
+              derefedNs1 <- traverse haesfDeref exploredNs1
+              derefedNs2 <- traverse haesfDeref exploredNs2
 
               let mkByNameMap :: [HashAnnotatedEffectfulStreamLayer m]
                               -> HashMap Name (HashAnnotatedEffectfulStreamLayer m)
                   mkByNameMap ns = Map.fromList $ fmap (\e -> (neName e, e)) ns
 
+              -- ahaha fuck I can't just use 'join' here can I
+              -- note: can, instead of doing this as separate, build up tree where diffs+expansion status in same struct? nah lol CAN'T
+              -- note: join diffs, take list of before/after expansions from subnodes and use to build this node
+              -- note: no ordering guarantee for expansion, will be in order expanded?
+              -- note: can I keep ordering for each? instead of filter just map all to one layer of PartiallyExpanded backed by Merkle
+              --       and just keep moving Merkle layers into PartiallyExpanded as I go? I THINK I can... (note: I can't)
+              -- note: fuck it, order doesn't matter here, I've already accepted that - order not preserved in sublists
               fmap join . traverse resolveMapDiff $ mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
 
     haesfPointer :: forall f . Term (Compose ((,) Pointer) f) -> Pointer
@@ -99,6 +107,7 @@ compareMerkleTrees' t1 t2
                -> m (HashAnnotatedEffectfulStreamLayer m)
     haesfDeref   = getCompose . snd . getCompose . out
 
+    -- fuck, getting this + the above to work will be nontrivial - but possible!
     resolveMapDiff :: These (Name, HashAnnotatedEffectfulStreamLayer m) (Name, HashAnnotatedEffectfulStreamLayer m)
                    -> m [Diff]
     resolveMapDiff = these
@@ -112,34 +121,12 @@ compareMerkleTrees' t1 t2
 -- TODO: hang on to full tree as fetched and log after? would help in testing (asserting only some chunk was fetched..)
 compareMerkleTrees
   :: forall m
-   . Monad m
+   . MonadIO m
   => Store m
-  -> MerkleTree
-  -> MerkleTree
+  -> Pointer -- top level interface is just pointers!
+  -> Pointer -- top level interface is just pointers!
   -> m [Diff]
-compareMerkleTrees store mt1 mt2 = undefined
-  where
-    lazyExpandTree
-      :: CVCoAlgebra (HashAnnotatedEffectfulStreamF m) MerkleTree
-    lazyExpandTree (In (Direct p e)) =
-      let e' :: (HashAnnotatedEffectfulStreamF m) MerkleTree
-          e' = Compose (p, Compose $ pure $ e)
-          e'' :: (HashAnnotatedEffectfulStreamF m) (CoAttr (HashAnnotatedEffectfulStreamF m) MerkleTree)
-          e'' = Automatic <$> e'
-       in e''
-
-    -- lazyExpandTree (In (Indirect p))
-    --   =
-    --   let d :: m ConcreteMerkleTreeLayer -- store can return multiple tree layers
-    --       d  = deref store p
-    --       d' :: m (CoAttr (HashAnnotatedEffectfulStreamF m) MerkleTree)
-    --       d' = fmap (Manual . fmap (ana lazyExpandTree)) d
-    --       -- d'' :: Term (HashAnnotatedEffectfulStreamF m)
-    --       -- d''  = (In . Compose . (p,) . Compose) d'
-    --    in Compose (p, d')
-
-type HashAnnotatedEffectfulStreamF m
-  = Compose ((,) Pointer) (Compose m (NamedEntity Tree))
-
-type HashAnnotatedEffectfulStreamLayer m =
-  NamedEntity Tree (Term (HashAnnotatedEffectfulStreamF m))
+compareMerkleTrees store mt1 mt2 =
+  -- transform merkle trees (hash-addressed indirection) into lazily streaming data structures
+  -- before passing to diffing alg
+  compareMerkleTrees' (lazyDeref store mt1) (lazyDeref store mt2)

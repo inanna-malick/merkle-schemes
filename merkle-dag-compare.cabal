@@ -23,6 +23,7 @@ executable merkle-dag-compare
   ghc-options:     -Wall -Werror
 
   build-depends:       base >=4.8 && <4.9,
+                       bytestring,
                        aeson,
                        containers,
                        directory,
@@ -30,7 +31,7 @@ executable merkle-dag-compare
                        mtl,
                        unordered-containers,
                        pretty,
-                       -- redis-io,
+                       random,
                        text,
                        transformers
   hs-source-dirs:      src
