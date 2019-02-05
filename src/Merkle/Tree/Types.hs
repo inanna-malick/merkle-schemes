@@ -72,7 +72,7 @@ makeShallow = fmap mtPointer
 -- | Forget information at the type level
 --   turn a value known to be shallow to a potentially-deep one
 makeConcrete :: (NamedEntity :+ Tree) Pointer -> (NamedEntity :+ Tree) MerkleTree
-makeConcrete = fmap (In . C . Indirect)
+makeConcrete = fmap (Fix . C . Indirect)
 
 
 type GlobalStore = IORef (HashMap Pointer  ((NamedEntity :+ Tree) MerkleTree))

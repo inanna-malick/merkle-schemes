@@ -146,3 +146,25 @@ compareMerkleTrees' t1 t2
                   expansions2 = expand name2 $ unexploredNs2 ++ rExpansions2
 
               pure (diffs, (expansions1, expansions2))
+
+
+
+
+unexpanded
+  :: Pointer
+  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+unexpanded p = Fix $ C (p, C Nothing)
+
+expanded
+  :: NamedTreeLayer $ Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+  -> Pointer
+  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+expanded x p = Fix $ C (p, C $ Just x)
+
+-- todo better name?
+expandedShallow
+  :: forall g
+   . NamedTreeLayer $ (Fix (WithHash :+ g))
+  -> Pointer
+  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+expandedShallow x = expanded (fmap (\(Fix (C (p,_))) -> Fix $ C (p, C Nothing)) x)

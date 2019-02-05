@@ -22,9 +22,10 @@ data HashIdentifiedEntity a
   | Indirect Pointer       -- indirect ref is just a pointer in some hash-addressed store
   deriving (Eq, Show, Functor)
 
+-- note - can probably merge this with ((,) Pointer :+ ..)
 mtPointer :: Fix (HashIdentifiedEntity :+ f) -> Pointer
-mtPointer (In (C (Direct p _))) = p
-mtPointer (In (C (Indirect p))) = p
+mtPointer (Fix (C (Direct p _))) = p
+mtPointer (Fix (C (Indirect p))) = p
 
 instance FromJSON Pointer where
     -- this generates a Value

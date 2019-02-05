@@ -74,7 +74,7 @@ addDirTreeToStore store = cata alg
           children' <- traverse id children
           pure $ Node children'
       pointer <- uploadShallow store $ makeShallow $ C entity
-      pure $ In $ C $ Direct pointer $ C entity
+      pure . Fix $ C $ Direct pointer $ C entity
 
 buildDirTree'
   :: forall m
