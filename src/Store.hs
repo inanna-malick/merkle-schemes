@@ -41,13 +41,18 @@ hoistStore f gs
   }
 
 
+createTmpDir :: String -> IO FilePath -- todo this should really be bracket
+createTmpDir prefix = do
+  sysTmp <- getTemporaryDirectory
+  x <- randomIO -- collision detection? lmao no lol #YOLO
+  let dir = sysTmp ++ "/" ++ prefix ++ show (x :: Int)
+  createDirectory dir
+  putStrLn $ "created temp dir: " ++ dir
+  pure dir
+
 tmpFsStore :: IO (Store (ExceptT MerkleTreeLookupError IO))
 tmpFsStore = do
-  sysTmp <- getTemporaryDirectory
-  x <- randomIO
-  let dir = sysTmp ++ "/merklestore" ++ show (x :: Int)
-  createDirectory dir
-  putStrLn $ "using store: " ++ dir
+  dir <- createTmpDir "merklestore"
   pure $ fsStore dir
 
 fsStore :: FilePath -> Store (ExceptT MerkleTreeLookupError IO)
@@ -56,18 +61,19 @@ fsStore root
   { deref = \p -> do
       liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via fs state store"
       contents <- liftIO $ B.readFile (root ++ "/" ++ f p)
+      -- liftIO . putStrLn $ "returning deref res via fs state store: " ++ show contents
       case AE.decode contents of
         Nothing -> throwError $ EntityNotFoundInStore p
         Just x  -> do
-          -- putStrLn $ "returning deref res via fs state store: " ++ ??? x
           pure $ makeConcrete x
   , uploadShallow = \smtl -> do
       let p = Pointer $ Hash.hash smtl
-          -- todo something cooler
       liftIO $ B.writeFile (root ++ "/" ++ f p) (AE.encode smtl)
       pure p
   }
   where
+
+    -- todo something cooler and more human-readable eg []
     f p = "pointer_" ++ show (unPointer p)
 
 
