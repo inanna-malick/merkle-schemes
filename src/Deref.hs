@@ -46,11 +46,17 @@ lazyDeref store = futu alg
     alg :: CVCoAlgebra (HashAnnotatedEffectfulStreamF m) Pointer
     alg p = Compose (p, Compose $ handleCMTL <$> deref store p)
 
-    handleCMTL (NamedEntity name e)
-      = NamedEntity name $ fmap (handleMTL) e
+    -- handleCMTL :: Term (Compose HashIdentifiedEntity MerkleTreeLayer)
+    --           -> CoAttr (Compose ((,) Pointer) (Compose m (Compose NamedEntity Tree))) Pointer
+    handleCMTL (Compose (NamedEntity name e))
+      = Compose . NamedEntity name $ fmap (handleMTL) e
 
-    handleMTL (In (Direct p e)) = Manual $ Compose (p, Compose . pure $ handleCMTL e)
-    handleMTL (In (Indirect p)) = Automatic p
+
+    handleMTL :: Term (Compose HashIdentifiedEntity MerkleTreeLayer)
+              -> CoAttr (Compose ((,) Pointer) (Compose m (Compose NamedEntity Tree))) Pointer
+
+    handleMTL (In (Compose (Direct p e))) = Manual $ Compose (p, Compose . pure $ handleCMTL e)
+    handleMTL (In (Compose (Indirect p))) = Automatic p
 
 -- type PartiallyExpandedHashAnnotatedTree
 --   = Term PartiallyExpandedHashAnnotatedTreeF
@@ -62,10 +68,10 @@ lazyDeref store = futu alg
 -- unexpanded p = Compose (p, Compose Nothing)
 
 type HashAnnotatedTree
-  = Compose ((,) Pointer) (NamedEntity Tree)
+  = Compose ((,) Pointer) (Compose NamedEntity Tree)
 
 type HashAnnotatedEffectfulStreamF m
-  = Compose ((,) Pointer) (Compose m (NamedEntity Tree))
+  = Compose ((,) Pointer) (Compose m (Compose NamedEntity Tree))
 
-type HashAnnotatedEffectfulStreamLayer m =
-  NamedEntity Tree (Term (HashAnnotatedEffectfulStreamF m))
+type HashAnnotatedEffectfulStreamLayer m
+  = Compose NamedEntity Tree (Term (HashAnnotatedEffectfulStreamF m))

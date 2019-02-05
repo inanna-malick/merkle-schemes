@@ -12,6 +12,7 @@ module Merkle.Types where
 
 --------------------------------------------
 import           Data.Aeson
+import           Data.Functor.Compose
 import qualified Data.Hashable as Hash
 import           GHC.Generics (Generic)
 --------------------------------------------
@@ -26,14 +27,14 @@ newtype Pointer = Pointer { unPointer :: Hash }
 instance Hash.Hashable Pointer
 
 -- | Some entity (f a) identified by a hash pointer. Can either be a direct or indirect reference
-data HashIdentifiedEntity (f :: * -> *) (a :: *)
-  = Direct   Pointer (f a) -- node id is included in node metadata of direct ref (pointer)
+data HashIdentifiedEntity a
+  = Direct   Pointer a -- node id is included in node metadata of direct ref (pointer)
   | Indirect Pointer       -- indirect ref is just a pointer in some hash-addressed store
   deriving (Eq, Show, Functor)
 
-mtPointer :: Term (HashIdentifiedEntity f) -> Pointer
-mtPointer (In (Direct p _)) = p
-mtPointer (In (Indirect p)) = p
+mtPointer :: Term (Compose HashIdentifiedEntity f) -> Pointer
+mtPointer (In (Compose (Direct p _))) = p
+mtPointer (In (Compose (Indirect p))) = p
 
 instance FromJSON Pointer where
     -- this generates a Value
