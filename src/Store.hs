@@ -29,7 +29,7 @@ data Store m
     -- returning multiple layers at once based on (eg) past usage patterns
     deref :: Pointer -> m ConcreteMerkleTreeLayer
     -- this allows for each store to use its own hash algorithm - not sure if I like that
-  , uploadShallow :: ShallowMerkleTreeLayer -> m Pointer
+  , uploadShallow :: MerkleTreeLayer Pointer -> m Pointer
   }
 
 
@@ -65,10 +65,10 @@ fsStore root
       case AE.decode contents of
         Nothing -> throwError $ EntityNotFoundInStore p
         Just x  -> do
-          pure $ makeConcrete x
+          pure $ makeConcrete $ unSMTL x
   , uploadShallow = \smtl -> do
-      let p = Pointer $ Hash.hash smtl
-      liftIO $ B.writeFile (root ++ "/" ++ f p) (AE.encode smtl)
+      let p = Pointer $ Hash.hash $ SMTL smtl
+      liftIO $ B.writeFile (root ++ "/" ++ f p) (AE.encode $ SMTL smtl)
       pure p
   }
   where
@@ -78,7 +78,7 @@ fsStore root
 
 
 
-iorefStore :: IORef (HashMap Pointer ShallowMerkleTreeLayer)
+iorefStore :: IORef (HashMap Pointer (MerkleTreeLayer Pointer))
            -> Store (ExceptT MerkleTreeLookupError IO)
 iorefStore ioref
   = Store
@@ -91,7 +91,7 @@ iorefStore ioref
           -- putStrLn $ "returning deref res: " ++ showT x
           pure $ makeConcrete x
   , uploadShallow = \smtl -> do
-      let pointer = Pointer $ Hash.hash smtl
+      let pointer = Pointer $ Hash.hash $ SMTL smtl
       liftIO $ modifyIORef' ioref (Map.insert pointer smtl)
       pure pointer
   }

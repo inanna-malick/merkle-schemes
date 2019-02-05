@@ -36,11 +36,11 @@ outputDirTree store outdir pointer = do
   liftIO $ evalStateT (cata alg derefed) [outdir]
 
   where
-    alg :: Algebra (Compose ((,) Pointer) (NamedEntity Tree)) (StateT [FilePath] IO ())
-    alg (Compose (_p, (NamedEntity name (Leaf body))))     = do
+    alg :: Algebra (Compose ((,) Pointer) (Compose NamedEntity Tree)) (StateT [FilePath] IO ())
+    alg (Compose (_p, (Compose (NamedEntity name (Leaf body)))))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
-    alg (Compose (_p, (NamedEntity name (Node children)))) = do
+    alg (Compose (_p, (Compose (NamedEntity name (Node children))))) = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ Dir.createDirectory path
       modify (push name)
@@ -69,20 +69,20 @@ addDirTreeToStore
   :: forall m
    . Monad m
   => Store m
-  -> Term (Compose m (NamedEntity Tree))
+  -> Term (Compose m (Compose NamedEntity Tree))
   -> m MerkleTree
 addDirTreeToStore store = cata alg
   where
-    alg :: Algebra (Compose m (NamedEntity Tree)) (m MerkleTree)
+    alg :: Algebra (Compose m (Compose NamedEntity Tree)) (m MerkleTree)
     alg getEntity = do
-      (NamedEntity name entity') <- getCompose $ getEntity
+      (Compose (NamedEntity name entity')) <- getCompose $ getEntity
       entity <- NamedEntity name <$> case entity' of
         Leaf body -> pure $ Leaf body
         Node children -> do
           children' <- traverse id children
           pure $ Node children'
-      pointer <- uploadShallow store $ makeShallow entity
-      pure $ In $ Direct pointer entity
+      pointer <- uploadShallow store $ makeShallow $ Compose entity
+      pure $ In $ Compose $ Direct pointer $ Compose entity
 
 buildDirTree'
   :: forall m
@@ -91,24 +91,22 @@ buildDirTree'
   -- tree structure _without_ pointer annotation
   -- type-level guarantee that there is no hash identified
   -- entity indirection allowed here
-  -> Term (Compose m (NamedEntity Tree))
+  -> Term (Compose m (Compose NamedEntity Tree))
 buildDirTree' = ana alg
   where
-    justTheName :: String -> String -- hacky hax but it works - take just the name given a file path
-    justTheName = reverse . takeWhile (/= '/') . reverse
-
-    alg :: CoAlgebra (Compose m (NamedEntity Tree)) FilePath
+    alg :: CoAlgebra (Compose m (Compose NamedEntity Tree)) FilePath
     alg path = Compose $ do
       -- todo: validation of input file path, ideally some 'probefile :: FilePath -> IO FileType' widget
       isFile <- liftIO $ Dir.doesFileExist path
       if isFile
         then do
           fc <- liftIO $ readFile path
-          pure $ NamedEntity (justTheName path) $ Leaf fc
+          pure . Compose . NamedEntity (justTheName path) $ Leaf fc
         else do
           isDir <- liftIO $ Dir.doesDirectoryExist path
           if isDir
-            then fmap ( NamedEntity (justTheName path)
+            then fmap ( Compose
+                      . NamedEntity (justTheName path)
                       . Node
                       . fmap (\x -> path ++ "/" ++ x)
                       . filter (/= ".")
@@ -117,3 +115,6 @@ buildDirTree' = ana alg
                . liftIO
                $ Dir.getDirectoryContents path
             else fail ("file read error: unexpected type at " ++ path)
+
+    justTheName :: String -> String -- hacky hax but it works - take just the name given a file path
+    justTheName = reverse . takeWhile (/= '/') . reverse

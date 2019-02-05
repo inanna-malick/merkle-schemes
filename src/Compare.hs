@@ -48,10 +48,10 @@ compareMerkleTrees' t1 t2
 
   where
     compareDerefed
-      :: (NamedEntity Tree (Term (HashAnnotatedEffectfulStreamF m)))
-      -> (NamedEntity Tree (Term (HashAnnotatedEffectfulStreamF m)))
+      :: (Compose NamedEntity Tree) (Term (HashAnnotatedEffectfulStreamF m))
+      -> (Compose NamedEntity Tree) (Term (HashAnnotatedEffectfulStreamF m))
       -> m [Diff]
-    compareDerefed (NamedEntity name1 entity1) (NamedEntity name2 entity2)
+    compareDerefed (Compose (NamedEntity name1 entity1)) (Compose (NamedEntity name2 entity2))
       | name1 /= name2 = do
           -- flatten out sub-entities to only contain pointers then check equality
           if (fmap haesfPointer entity1 == fmap haesfPointer entity2)
@@ -89,7 +89,7 @@ compareMerkleTrees' t1 t2
 
               let mkByNameMap :: [HashAnnotatedEffectfulStreamLayer m]
                               -> HashMap Name (HashAnnotatedEffectfulStreamLayer m)
-                  mkByNameMap ns = Map.fromList $ fmap (\e -> (neName e, e)) ns
+                  mkByNameMap ns = Map.fromList $ fmap (\(Compose e) -> (neName e, Compose e)) ns
 
               -- ahaha fuck I can't just use 'join' here can I
               -- note: can, instead of doing this as separate, build up tree where diffs+expansion status in same struct? nah lol CAN'T
