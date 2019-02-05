@@ -1,8 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
-
+{-# LANGUAGE TypeOperators #-}
 
 module Store where
-
 
 --------------------------------------------
 import qualified Data.Aeson as AE
@@ -18,6 +17,7 @@ import           System.Random (randomIO)
 import           Errors
 import           Merkle.Types
 import           Merkle.Tree.Types
+import           Util.MyCompose
 --------------------------------------------
 
 
@@ -29,7 +29,7 @@ data Store m
     -- returning multiple layers at once based on (eg) past usage patterns
     deref :: Pointer -> m ConcreteMerkleTreeLayer
     -- this allows for each store to use its own hash algorithm - not sure if I like that
-  , uploadShallow :: MerkleTreeLayer Pointer -> m Pointer
+  , uploadShallow :: (NamedEntity :+ Tree) Pointer -> m Pointer
   }
 
 
@@ -78,7 +78,7 @@ fsStore root
 
 
 
-iorefStore :: IORef (HashMap Pointer (MerkleTreeLayer Pointer))
+iorefStore :: IORef (HashMap Pointer ((NamedEntity :+ Tree) Pointer))
            -> Store (ExceptT MerkleTreeLookupError IO)
 iorefStore ioref
   = Store

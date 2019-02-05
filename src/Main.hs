@@ -16,12 +16,11 @@ import           Errors
 import           Ingress -- (buildDirTree, outputDirTree)
 import           Merkle.Types
 import           Merkle.Tree.Types
+import           Util.MyCompose
 import           Util.Util (mapErrUtil)
 import           Util.RecursionSchemes (cata)
 import           Store
--- import Merkle.Tree.Render -- todo resurect?
 --------------------------------------------
-import           Data.Functor.Compose
 
 main :: IO ()
 main = run =<< parse
@@ -58,8 +57,8 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
     mapErrUtil InputError $ do
       let s (a,b) = (cata s' a, cata s' b)
           -- todo pretty printer here
-          s' (Compose (p, Compose Nothing)) = show (unPointer p) ++ ":unexpanded"
-          s' (Compose (p, Compose (Just (Compose (NamedEntity n t))))) = show (unPointer p) ++ ":(" ++ n ++"):" ++ show t
+          s' (C (p, C Nothing)) = show (unPointer p) ++ ":unexpanded"
+          s' (C (p, C (Just (C (NamedEntity n t))))) = show (unPointer p) ++ ":(" ++ n ++"):" ++ show t
       liftIO $ putStrLn "comparing before to after1"
       compareMerkleTrees store before after1 >>= liftIO . print . fmap s
 

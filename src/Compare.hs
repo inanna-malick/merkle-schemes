@@ -5,6 +5,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeOperators #-}
 
 
 -- | Code for comparing two merkle trees in which any node can be
@@ -14,34 +15,30 @@ module Compare (compareMerkleTrees) where
 
 --------------------------------------------
 import           Control.Monad.Except
-import           Data.Functor.Compose
 import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.Set as Set
 --------------------------------------------
 import           Deref
 import           Diff.Types
-import           Util.These -- (These(..), mapCompare)
+import           Util.These
+import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
 import           Merkle.Types
 import           Store
 --------------------------------------------
 
-
--- IDEA: raw list of pointers expanded for auditing - not bothering to reconstruct tree structure
-type DiffExpansion' = (PartiallyExpandedHashAnnotatedTree, PartiallyExpandedHashAnnotatedTree)
-type DiffExpansion = Pointer -> PartiallyExpandedHashAnnotatedTree
-
-
 -- compare two merkle trees where the hash-identified nodes have been
 -- converted to lazily-expanded effectful streams of values in some monadic stack 'm'
 compareMerkleTrees'
   :: forall m
-   . MonadIO m
+  -- no knowledge about actual monad stack - just knows it can
+  -- sequence actions in it to deref successive layers (because monad)
+   . Monad m
   => Term (HashAnnotatedEffectfulStreamF m)
   -> Term (HashAnnotatedEffectfulStreamF m)
-  -> m ([Diff], DiffExpansion')
+  -> m ([Diff], (PartiallyExpandedHashAnnotatedTree, PartiallyExpandedHashAnnotatedTree))
 compareMerkleTrees' t1 t2
   | haesfPointer t1 == haesfPointer t2
       -- no diff, no need to explore further here
@@ -54,10 +51,15 @@ compareMerkleTrees' t1 t2
 
   where
     compareDerefed
-      :: (Compose NamedEntity Tree) (Term (HashAnnotatedEffectfulStreamF m))
-      -> (Compose NamedEntity Tree) (Term (HashAnnotatedEffectfulStreamF m))
-      -> m ([Diff], (DiffExpansion, DiffExpansion))
-    compareDerefed ne1@(Compose (NamedEntity name1 entity1)) ne2@(Compose (NamedEntity name2 entity2))
+      :: (NamedEntity :+ Tree) (Term (HashAnnotatedEffectfulStreamF m))
+      -> (NamedEntity :+ Tree) (Term (HashAnnotatedEffectfulStreamF m))
+      -> m ( [Diff]
+           -- functions used to build up structure - in this fn we have no access to pointers (having already checked ==)
+           , ( Pointer -> PartiallyExpandedHashAnnotatedTree
+             , Pointer -> PartiallyExpandedHashAnnotatedTree
+             )
+           )
+    compareDerefed ne1@(C (NamedEntity name1 entity1)) ne2@(C (NamedEntity name2 entity2))
       | name1 /= name2 = do
           -- flatten out sub-entities to only contain pointers then check equality
           if (fmap haesfPointer entity1 == fmap haesfPointer entity2)
@@ -97,7 +99,7 @@ compareMerkleTrees' t1 t2
 
               let mkByNameMap :: [(Pointer, HashAnnotatedEffectfulStreamLayer m)]
                               -> HashMap Name (Pointer, HashAnnotatedEffectfulStreamLayer m)
-                  mkByNameMap ns = Map.fromList $ fmap (\(p, Compose e) -> (neName e, (p, Compose e))) ns
+                  mkByNameMap ns = Map.fromList $ fmap (\(p, C e) -> (neName e, (p, C e))) ns
 
               recurseRes <-
                 traverse resolveMapDiff $ mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
@@ -108,13 +110,13 @@ compareMerkleTrees' t1 t2
 
                   expansions1, expansions2 :: Pointer -> PartiallyExpandedHashAnnotatedTree
                   expansions1
-                    = expanded $ Compose $ NamedEntity name1 $ Node $ unexploredNs1 ++ rExpansions1
+                    = expanded $ C $ NamedEntity name1 $ Node $ unexploredNs1 ++ rExpansions1
                   expansions2
-                    = expanded $ Compose $ NamedEntity name1 $ Node $ unexploredNs2 ++ rExpansions2
+                    = expanded $ C $ NamedEntity name1 $ Node $ unexploredNs2 ++ rExpansions2
 
               pure (diffs, (expansions1, expansions2))
 
-    haesfPointer :: forall f . Term (Compose ((,) Pointer) f) -> Pointer
+    haesfPointer :: forall f . Term ((,) Pointer :+ f) -> Pointer
     haesfPointer = fst . getCompose . out
 
     haesfDeref :: Term (HashAnnotatedEffectfulStreamF m)
@@ -132,17 +134,18 @@ compareMerkleTrees' t1 t2
       )
       (pure . (,Nothing) . pure . EntityCreated . fst) -- shit - no expansion
 
--- | Compare two merkle trees for equality, producing diffs
+-- | Compare two merkle trees for equality, producing diffs and a record of expansions/derefs performed
 --   lazily fetches structure of the two trees such that only the parts required
 --   to do this comparison are fetched from the global state store (via 'network call')
--- TODO: hang on to full tree as fetched and log after? would help in testing (asserting only some chunk was fetched..)
 compareMerkleTrees
   :: forall m
-   . MonadIO m
+  -- no knowledge about actual monad stack - just knows it's the same
+  -- as used by the store, which lets us create a lazy effectful streaming structure
+   . Monad m
   => Store m
   -> Pointer -- top level interface is just pointers!
   -> Pointer -- top level interface is just pointers!
-  -> m ([Diff], DiffExpansion')
+  -> m ([Diff], (PartiallyExpandedHashAnnotatedTree, PartiallyExpandedHashAnnotatedTree))
 compareMerkleTrees store mt1 mt2 =
   -- transform merkle trees (hash-addressed indirection) into lazily streaming data structures
   -- before passing to diffing alg
