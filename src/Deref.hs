@@ -4,16 +4,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
 
 
 module Deref where
 
 --------------------------------------------
-import           Data.Functor.Compose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
 import           Merkle.Types
 import           Store
+--------------------------------------------
+import           Util.MyCompose
 --------------------------------------------
 
 strictDeref
@@ -25,11 +27,11 @@ strictDeref
 strictDeref store = cata alg . lazyDeref store
   where
     alg :: Algebra (HashAnnotatedEffectfulStreamF m) (m (Term HashAnnotatedTree))
-    alg (Compose (p, e)) =
+    alg (C (p, C e)) =
       do
-        e' <- getCompose e
+        e' <- e
         e'' <- traverse id e'
-        pure $ In $ Compose (p, e'')
+        pure $ In $ C (p, e'')
 
 
 -- construct a potentially-infinite tree-shaped stream of further values constructed by
@@ -43,42 +45,45 @@ lazyDeref
   -> Term (HashAnnotatedEffectfulStreamF m)
 lazyDeref store = futu alg
   where
-    alg :: CVCoAlgebra (HashAnnotatedEffectfulStreamF m) Pointer
-    alg p = Compose (p, Compose $ handleCMTL <$> deref store p)
+    alg :: CVCoAlgebra ((,) Pointer :+ m :+ NamedEntity :+ Tree) Pointer
+    alg p = C (p, C $ handleCMTL <$> deref store p)
 
-    -- handleCMTL :: Term (Compose HashIdentifiedEntity MerkleTreeLayer)
-    --           -> CoAttr (Compose ((,) Pointer) (Compose m (Compose NamedEntity Tree))) Pointer
-    handleCMTL (Compose (NamedEntity name e))
-      = Compose . NamedEntity name $ fmap (handleMTL) e
+    handleCMTL (C (NamedEntity name e))
+      = C . NamedEntity name $ fmap (handleMTL) e
 
-
-    handleMTL :: Term (Compose HashIdentifiedEntity MerkleTreeLayer)
-              -> CoAttr (Compose ((,) Pointer) (Compose m (Compose NamedEntity Tree))) Pointer
-
-    handleMTL (In (Compose (Direct p e))) = Manual $ Compose (p, Compose . pure $ handleCMTL e)
-    handleMTL (In (Compose (Indirect p))) = Automatic p
+    handleMTL (In (C (Direct p e))) = Manual $ C (p, C . pure $ handleCMTL e)
+    handleMTL (In (C (Indirect p))) = Automatic p
 
 type PartiallyExpandedHashAnnotatedTree
   = Term PartiallyExpandedHashAnnotatedTreeF
 
 type PartiallyExpandedHashAnnotatedTreeF
-  = Compose ((,) Pointer) (Compose Maybe (Compose NamedEntity Tree))
+  = (,) Pointer :+ Maybe :+ NamedEntity :+ Tree
 
-unexpanded :: Pointer -> PartiallyExpandedHashAnnotatedTree
-unexpanded p = In $ Compose (p, Compose Nothing)
+unexpanded
+  :: Pointer
+  -> PartiallyExpandedHashAnnotatedTree
+unexpanded p = In $ C (p, C Nothing)
 
-expanded :: MerkleTreeLayer PartiallyExpandedHashAnnotatedTree -> Pointer -> PartiallyExpandedHashAnnotatedTree
-expanded x p = In $ Compose (p, Compose $ Just x)
+expanded
+  :: (NamedEntity :+ Tree) PartiallyExpandedHashAnnotatedTree
+  -> Pointer
+  -> PartiallyExpandedHashAnnotatedTree
+expanded x p = In $ C (p, C $ Just x)
 
 -- todo better name?
-expandedShallow :: MerkleTreeLayer (Term (Compose ((,) Pointer) g)) -> Pointer -> PartiallyExpandedHashAnnotatedTree
-expandedShallow x = expanded (fmap (\(In (Compose (p,_))) -> In $ Compose (p, Compose Nothing)) x)
+expandedShallow
+  :: forall g
+   . (NamedEntity :+ Tree) (Term ((,) Pointer :+ g))
+  -> Pointer
+  -> PartiallyExpandedHashAnnotatedTree
+expandedShallow x = expanded (fmap (\(In (C (p,_))) -> In $ C (p, C Nothing)) x)
 
 type HashAnnotatedTree
-  = Compose ((,) Pointer) (Compose NamedEntity Tree)
+  = (,) Pointer :+ NamedEntity :+ Tree
 
 type HashAnnotatedEffectfulStreamF m
-  = Compose ((,) Pointer) (Compose m (Compose NamedEntity Tree))
+  = (,) Pointer :+ m :+ NamedEntity :+ Tree
 
 type HashAnnotatedEffectfulStreamLayer m
-  = Compose NamedEntity Tree (Term (HashAnnotatedEffectfulStreamF m))
+  = (NamedEntity :+ Tree) (Term (HashAnnotatedEffectfulStreamF m))

@@ -6,18 +6,19 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
 
--- todo rename to more generic filestore IO
+-- todo rename to indicate this does more generic filestore IO
 module Ingress (buildDirTree, outputDirTree) where
 
 --------------------------------------------
 import           Control.Monad.Except
 import           Control.Monad.Trans.State.Lazy
 import qualified Data.List as List
-import           Data.Functor.Compose (Compose(..))
 import qualified System.Directory as Dir
 --------------------------------------------
 import           Deref
+import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
 import           Merkle.Types (Pointer, HashIdentifiedEntity(..))
@@ -36,11 +37,11 @@ outputDirTree store outdir pointer = do
   liftIO $ evalStateT (cata alg derefed) [outdir]
 
   where
-    alg :: Algebra (Compose ((,) Pointer) (Compose NamedEntity Tree)) (StateT [FilePath] IO ())
-    alg (Compose (_p, (Compose (NamedEntity name (Leaf body)))))     = do
+    alg :: Algebra ((,) Pointer :+ NamedEntity :+ Tree) (StateT [FilePath] IO ())
+    alg (C (_p, (C (NamedEntity name (Leaf body)))))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
-    alg (Compose (_p, (Compose (NamedEntity name (Node children))))) = do
+    alg (C (_p, (C (NamedEntity name (Node children))))) = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ Dir.createDirectory path
       modify (push name)
@@ -69,20 +70,20 @@ addDirTreeToStore
   :: forall m
    . Monad m
   => Store m
-  -> Term (Compose m (Compose NamedEntity Tree))
+  -> Term (m :+ NamedEntity :+ Tree)
   -> m MerkleTree
 addDirTreeToStore store = cata alg
   where
-    alg :: Algebra (Compose m (Compose NamedEntity Tree)) (m MerkleTree)
-    alg getEntity = do
-      (Compose (NamedEntity name entity')) <- getCompose $ getEntity
+    alg :: Algebra (m :+ NamedEntity :+ Tree) (m MerkleTree)
+    alg (C getEntity) = do
+      (C (NamedEntity name entity')) <- getEntity
       entity <- NamedEntity name <$> case entity' of
         Leaf body -> pure $ Leaf body
         Node children -> do
           children' <- traverse id children
           pure $ Node children'
-      pointer <- uploadShallow store $ makeShallow $ Compose entity
-      pure $ In $ Compose $ Direct pointer $ Compose entity
+      pointer <- uploadShallow store $ makeShallow $ C entity
+      pure $ In $ C $ Direct pointer $ C entity
 
 buildDirTree'
   :: forall m
@@ -91,21 +92,21 @@ buildDirTree'
   -- tree structure _without_ pointer annotation
   -- type-level guarantee that there is no hash identified
   -- entity indirection allowed here
-  -> Term (Compose m (Compose NamedEntity Tree))
+  -> Term (m :+ NamedEntity :+ Tree)
 buildDirTree' = ana alg
   where
-    alg :: CoAlgebra (Compose m (Compose NamedEntity Tree)) FilePath
-    alg path = Compose $ do
+    alg :: CoAlgebra (m :+ NamedEntity :+ Tree) FilePath
+    alg path = C $ do
       -- todo: validation of input file path, ideally some 'probefile :: FilePath -> IO FileType' widget
       isFile <- liftIO $ Dir.doesFileExist path
       if isFile
         then do
           fc <- liftIO $ readFile path
-          pure . Compose . NamedEntity (justTheName path) $ Leaf fc
+          pure . C . NamedEntity (justTheName path) $ Leaf fc
         else do
           isDir <- liftIO $ Dir.doesDirectoryExist path
           if isDir
-            then fmap ( Compose
+            then fmap ( C
                       . NamedEntity (justTheName path)
                       . Node
                       . fmap (\x -> path ++ "/" ++ x)

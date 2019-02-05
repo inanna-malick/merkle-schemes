@@ -7,16 +7,17 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Merkle.Types where
 
 --------------------------------------------
 import           Data.Aeson
-import           Data.Functor.Compose
 import qualified Data.Hashable as Hash
 import           GHC.Generics (Generic)
 --------------------------------------------
 import           Util.RecursionSchemes (Term(..))
+import           Util.MyCompose
 --------------------------------------------
 
 type Hash = Int
@@ -32,9 +33,9 @@ data HashIdentifiedEntity a
   | Indirect Pointer       -- indirect ref is just a pointer in some hash-addressed store
   deriving (Eq, Show, Functor)
 
-mtPointer :: Term (Compose HashIdentifiedEntity f) -> Pointer
-mtPointer (In (Compose (Direct p _))) = p
-mtPointer (In (Compose (Indirect p))) = p
+mtPointer :: Term (HashIdentifiedEntity :+ f) -> Pointer
+mtPointer (In (C (Direct p _))) = p
+mtPointer (In (C (Indirect p))) = p
 
 instance FromJSON Pointer where
     -- this generates a Value
