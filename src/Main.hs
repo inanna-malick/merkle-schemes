@@ -14,10 +14,14 @@ import           Commands
 import           Compare (compareMerkleTrees)
 import           Errors
 import           Ingress -- (buildDirTree, outputDirTree)
-import           Merkle.Types (mtPointer)
+import           Merkle.Types
+import           Merkle.Tree.Types
 import           Util.Util (mapErrUtil)
+import           Util.RecursionSchemes (cata)
 import           Store
+-- import Merkle.Tree.Render -- todo resurect?
 --------------------------------------------
+import           Data.Functor.Compose
 
 main :: IO ()
 main = run =<< parse
@@ -26,7 +30,7 @@ run :: MerkleDiffOpts -> IO ()
 run (MerkleDiffOpts storeDir (Diff before after)) = do
   let store = fsStore storeDir
   res <- runExceptT $ compareMerkleTrees store before after
-  print res
+  print $ fmap fst res
 run (MerkleDiffOpts storeDir (Get p mfp)) = do
   let store = fsStore storeDir
   fp <- maybe (createTmpDir "merkle_get") pure mfp
@@ -52,14 +56,18 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
     after3 <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/after3/node2"
 
     mapErrUtil InputError $ do
+      let s (a,b) = (cata s' a, cata s' b)
+          -- todo pretty printer here
+          s' (Compose (p, Compose Nothing)) = show (unPointer p) ++ ":unexpanded"
+          s' (Compose (p, Compose (Just (Compose (NamedEntity n t))))) = show (unPointer p) ++ ":(" ++ n ++"):" ++ show t
       liftIO $ putStrLn "comparing before to after1"
-      compareMerkleTrees store before after1 >>= liftIO . print
+      compareMerkleTrees store before after1 >>= liftIO . print . fmap s
 
       liftIO $ putStrLn "comparing before to after2"
-      compareMerkleTrees store before after2 >>= liftIO . print
+      compareMerkleTrees store before after2 >>= liftIO . print . fmap s
 
       liftIO $ putStrLn "comparing before to after3"
-      compareMerkleTrees store before after3 >>= liftIO . print
+      compareMerkleTrees store before after3 >>= liftIO . print . fmap s
 
     mapErrUtil FileWriteError $ liftIO (createTmpDir "output-example") >>= flip (outputDirTree store) after3
 

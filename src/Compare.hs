@@ -23,11 +23,15 @@ import           Deref
 import           Diff.Types
 import           Util.These -- (These(..), mapCompare)
 import           Util.RecursionSchemes
--- import           Merkle.Tree.Render
 import           Merkle.Tree.Types
 import           Merkle.Types
 import           Store
 --------------------------------------------
+
+
+-- IDEA: raw list of pointers expanded for auditing - not bothering to reconstruct tree structure
+type DiffExpansion' = (PartiallyExpandedHashAnnotatedTree, PartiallyExpandedHashAnnotatedTree)
+type DiffExpansion = Pointer -> PartiallyExpandedHashAnnotatedTree
 
 
 -- compare two merkle trees where the hash-identified nodes have been
@@ -37,32 +41,34 @@ compareMerkleTrees'
    . MonadIO m
   => Term (HashAnnotatedEffectfulStreamF m)
   -> Term (HashAnnotatedEffectfulStreamF m)
-  -> m [Diff]
+  -> m ([Diff], DiffExpansion')
 compareMerkleTrees' t1 t2
   | haesfPointer t1 == haesfPointer t2
-      = pure [] -- no diff, no need to explore further here
+      -- no diff, no need to explore further here
+      = pure ([], (unexpanded $ haesfPointer t1, unexpanded $ haesfPointer t2))
   | otherwise
       = do deref1 <- haesfDeref t1
            deref2 <- haesfDeref t2
-           compareDerefed deref1 deref2
+           (diffres, (de1, de2)) <- compareDerefed deref1 deref2
+           pure (diffres, (de1 $ haesfPointer t1, de2 $ haesfPointer t2))
 
   where
     compareDerefed
       :: (Compose NamedEntity Tree) (Term (HashAnnotatedEffectfulStreamF m))
       -> (Compose NamedEntity Tree) (Term (HashAnnotatedEffectfulStreamF m))
-      -> m [Diff]
-    compareDerefed (Compose (NamedEntity name1 entity1)) (Compose (NamedEntity name2 entity2))
+      -> m ([Diff], (DiffExpansion, DiffExpansion))
+    compareDerefed ne1@(Compose (NamedEntity name1 entity1)) ne2@(Compose (NamedEntity name2 entity2))
       | name1 /= name2 = do
           -- flatten out sub-entities to only contain pointers then check equality
           if (fmap haesfPointer entity1 == fmap haesfPointer entity2)
             then
-              pure [EntityRenamed name1 name2]
+              pure ([EntityRenamed name1 name2], (expandedShallow ne1, expandedShallow ne2))
             else
-              pure [EntityDeleted name1, EntityCreated name2]
+              pure ([EntityDeleted name1, EntityCreated name2], (expandedShallow ne1, expandedShallow ne2))
       | otherwise = -- no name mismatch, but known hash mismatch - must explore further
           case (entity1, entity2) of
             (Leaf fc1, Leaf fc2)
-              | fc1 /= fc2   -> pure [LeafModified (name1, fc1, fc2)]
+              | fc1 /= fc2   -> pure ([LeafModified (name1, fc1, fc2)], (expandedShallow ne1, expandedShallow ne2))
               -- ASSERTION we can only get here if there's a hash diff, but
               --            if we have a hash diff then the file contents should differ!?!?
               -- NOTE: this indicates a situation where two hashes are /= but the hash-addressed
@@ -70,9 +76,9 @@ compareMerkleTrees' t1 t2
               -- NOTE: making this function pure in 'm' is pretty nice, logging this error
               --       would require some additional error type that I don't want to think about
               --       right now
-              | otherwise    -> pure []
-            (Node _, Leaf _) -> pure [DirReplacedWithFile name1]
-            (Leaf _, Node _) -> pure [FileReplacedWithDir name1]
+              | otherwise    -> pure ([], (unexpanded, unexpanded))
+            (Node _, Leaf _) -> pure ([DirReplacedWithFile name1], (expandedShallow ne1, expandedShallow ne2))
+            (Leaf _, Node _) -> pure ([FileReplacedWithDir name1], (expandedShallow ne2, expandedShallow ne1))
             (Node ns1, Node ns2) -> do
               let ns1Pointers = Set.fromList $ fmap haesfPointer ns1
                   ns2Pointers = Set.fromList $ fmap haesfPointer ns2
@@ -81,24 +87,32 @@ compareMerkleTrees' t1 t2
               let exploredNs1 = filter (not . flip Set.member (ns2Pointers) . haesfPointer) ns1
                   exploredNs2 = filter (not . flip Set.member (ns1Pointers) . haesfPointer) ns2
                   -- for construting 'unexpanded' branches
-                  -- unexploredNs1  = fmap (unexpanded . haesfPointer) . filter (flip Set.member (ns2Pointers) . haesfPointer) ns1
-                  -- unexploredNs2  = fmap (unexpanded . haesfPointer) . filter (flip Set.member (ns1Pointers) . haesfPointer) ns2
+                  unexploredNs1 :: [PartiallyExpandedHashAnnotatedTree]
+                  unexploredNs1  = fmap (unexpanded . haesfPointer) $ filter (flip Set.member (ns2Pointers) . haesfPointer) ns1
+                  unexploredNs2 :: [PartiallyExpandedHashAnnotatedTree]
+                  unexploredNs2  = fmap (unexpanded . haesfPointer) $ filter (flip Set.member (ns1Pointers) . haesfPointer) ns2
 
-              derefedNs1 <- traverse haesfDeref exploredNs1
-              derefedNs2 <- traverse haesfDeref exploredNs2
+              derefedNs1 <- traverse (\x -> fmap (haesfPointer x,) $ haesfDeref x) exploredNs1
+              derefedNs2 <- traverse (\x -> fmap (haesfPointer x,) $ haesfDeref x) exploredNs2
 
-              let mkByNameMap :: [HashAnnotatedEffectfulStreamLayer m]
-                              -> HashMap Name (HashAnnotatedEffectfulStreamLayer m)
-                  mkByNameMap ns = Map.fromList $ fmap (\(Compose e) -> (neName e, Compose e)) ns
+              let mkByNameMap :: [(Pointer, HashAnnotatedEffectfulStreamLayer m)]
+                              -> HashMap Name (Pointer, HashAnnotatedEffectfulStreamLayer m)
+                  mkByNameMap ns = Map.fromList $ fmap (\(p, Compose e) -> (neName e, (p, Compose e))) ns
 
-              -- ahaha fuck I can't just use 'join' here can I
-              -- note: can, instead of doing this as separate, build up tree where diffs+expansion status in same struct? nah lol CAN'T
-              -- note: join diffs, take list of before/after expansions from subnodes and use to build this node
-              -- note: no ordering guarantee for expansion, will be in order expanded?
-              -- note: can I keep ordering for each? instead of filter just map all to one layer of PartiallyExpanded backed by Merkle
-              --       and just keep moving Merkle layers into PartiallyExpanded as I go? I THINK I can... (note: I can't)
-              -- note: fuck it, order doesn't matter here, I've already accepted that - order not preserved in sublists
-              fmap join . traverse resolveMapDiff $ mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
+              recurseRes <-
+                traverse resolveMapDiff $ mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
+
+              let diffs = join $ fmap fst recurseRes
+                  rExpansions1 = recurseRes >>= (maybe [] (pure . fst) . snd)
+                  rExpansions2 = recurseRes >>= (maybe [] (pure . snd) . snd)
+
+                  expansions1, expansions2 :: Pointer -> PartiallyExpandedHashAnnotatedTree
+                  expansions1
+                    = expanded $ Compose $ NamedEntity name1 $ Node $ unexploredNs1 ++ rExpansions1
+                  expansions2
+                    = expanded $ Compose $ NamedEntity name1 $ Node $ unexploredNs2 ++ rExpansions2
+
+              pure (diffs, (expansions1, expansions2))
 
     haesfPointer :: forall f . Term (Compose ((,) Pointer) f) -> Pointer
     haesfPointer = fst . getCompose . out
@@ -107,13 +121,16 @@ compareMerkleTrees' t1 t2
                -> m (HashAnnotatedEffectfulStreamLayer m)
     haesfDeref   = getCompose . snd . getCompose . out
 
-    -- fuck, getting this + the above to work will be nontrivial - but possible!
-    resolveMapDiff :: These (Name, HashAnnotatedEffectfulStreamLayer m) (Name, HashAnnotatedEffectfulStreamLayer m)
-                   -> m [Diff]
+    resolveMapDiff :: These (Name, (Pointer, HashAnnotatedEffectfulStreamLayer m))
+                            (Name, (Pointer, HashAnnotatedEffectfulStreamLayer m))
+                   -> m ([Diff], Maybe (PartiallyExpandedHashAnnotatedTree, PartiallyExpandedHashAnnotatedTree))
     resolveMapDiff = these
-      (pure . pure . EntityDeleted . fst)
-      (\(_, a) (_, b) -> compareDerefed a b)
-      (pure . pure . EntityCreated . fst)
+      (pure . (,Nothing) . pure . EntityDeleted . fst) -- shit - no expansion
+      (\(_, (p1,a)) (_, (p2,b)) -> do
+         (diffs, (de1,de2)) <- compareDerefed a b
+         pure (diffs, Just (de1 p1, de2 p2))
+      )
+      (pure . (,Nothing) . pure . EntityCreated . fst) -- shit - no expansion
 
 -- | Compare two merkle trees for equality, producing diffs
 --   lazily fetches structure of the two trees such that only the parts required
@@ -125,7 +142,7 @@ compareMerkleTrees
   => Store m
   -> Pointer -- top level interface is just pointers!
   -> Pointer -- top level interface is just pointers!
-  -> m [Diff]
+  -> m ([Diff], DiffExpansion')
 compareMerkleTrees store mt1 mt2 =
   -- transform merkle trees (hash-addressed indirection) into lazily streaming data structures
   -- before passing to diffing alg

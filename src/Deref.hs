@@ -58,14 +58,21 @@ lazyDeref store = futu alg
     handleMTL (In (Compose (Direct p e))) = Manual $ Compose (p, Compose . pure $ handleCMTL e)
     handleMTL (In (Compose (Indirect p))) = Automatic p
 
--- type PartiallyExpandedHashAnnotatedTree
---   = Term PartiallyExpandedHashAnnotatedTreeF
+type PartiallyExpandedHashAnnotatedTree
+  = Term PartiallyExpandedHashAnnotatedTreeF
 
--- type PartiallyExpandedHashAnnotatedTreeF
---   = Compose ((,) Pointer) (Compose Maybe (NamedEntity Tree))
+type PartiallyExpandedHashAnnotatedTreeF
+  = Compose ((,) Pointer) (Compose Maybe (Compose NamedEntity Tree))
 
--- unexpanded :: Pointer -> PartiallyExpandedHashAnnotatedTree
--- unexpanded p = Compose (p, Compose Nothing)
+unexpanded :: Pointer -> PartiallyExpandedHashAnnotatedTree
+unexpanded p = In $ Compose (p, Compose Nothing)
+
+expanded :: MerkleTreeLayer PartiallyExpandedHashAnnotatedTree -> Pointer -> PartiallyExpandedHashAnnotatedTree
+expanded x p = In $ Compose (p, Compose $ Just x)
+
+-- todo better name?
+expandedShallow :: MerkleTreeLayer (Term (Compose ((,) Pointer) g)) -> Pointer -> PartiallyExpandedHashAnnotatedTree
+expandedShallow x = expanded (fmap (\(In (Compose (p,_))) -> In $ Compose (p, Compose Nothing)) x)
 
 type HashAnnotatedTree
   = Compose ((,) Pointer) (Compose NamedEntity Tree)
