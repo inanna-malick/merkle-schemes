@@ -1,4 +1,4 @@
-module Store where
+module Store (Store(..), tmpFsStore, fsStore, createTmpDir, iorefStore) where
 
 --------------------------------------------
 import qualified Data.Aeson as AE
@@ -18,8 +18,7 @@ import           Util.MyCompose
 --------------------------------------------
 
 
--- | Some capability to interact with some global store. Used to abstract
---   over multiple impls, eg redis vs. local ioref store for tests
+-- | Some capability to interact with some hash addressed merkle tree store
 data Store m
   = Store
   { -- | given a pointer, fetch the corresponding entity. Provides type-level guarantee that

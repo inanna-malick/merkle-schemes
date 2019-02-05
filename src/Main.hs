@@ -5,8 +5,7 @@ import           Control.Monad.Except (runExceptT, liftIO)
 --------------------------------------------
 import           Commands
 import           Compare (compareMerkleTrees)
-import           Errors
-import           FileIO -- (buildDirTree, outputDirTree)
+import           FileIO (buildDirTree, outputDirTree)
 import           Merkle.Types
 import           Merkle.Tree.Types
 import           Util.MyCompose
@@ -42,12 +41,12 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
     let forgetStructure = mtPointer
 
     -- read some merkle trees into memory (and into the store) and then forget all but the top pointer
-    before <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/before/node1"
-    after1 <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/after1/node1"
-    after2 <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/after2/node1"
-    after3 <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/after3/node2"
+    before <- mapErrUtil show $ forgetStructure <$> buildDirTree store "examples/before/node1"
+    after1 <- mapErrUtil show $ forgetStructure <$> buildDirTree store "examples/after1/node1"
+    after2 <- mapErrUtil show $ forgetStructure <$> buildDirTree store "examples/after2/node1"
+    after3 <- mapErrUtil show $ forgetStructure <$> buildDirTree store "examples/after3/node2"
 
-    mapErrUtil InputError $ do
+    mapErrUtil show $ do
       let s (a,b) = (cata s' a, cata s' b)
           -- todo pretty printer here
           s' (C (p, C Nothing)) = show (unPointer p) ++ ":unexpanded"
@@ -61,6 +60,6 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
       liftIO $ putStrLn "comparing before to after3"
       compareMerkleTrees store before after3 >>= liftIO . print . fmap s
 
-    mapErrUtil FileWriteError $ liftIO (createTmpDir "output-example") >>= flip (outputDirTree store) after3
+    mapErrUtil show $ liftIO (createTmpDir "output-example") >>= flip (outputDirTree store) after3
 
   print res'

@@ -9,6 +9,9 @@ import           Store
 import           Util.MyCompose
 --------------------------------------------
 
+
+-- | Greedily deref a merkle tree
+-- NOTE: fully consumes potentially-infinite effectful stream and may not terminate
 strictDeref
   :: forall m
    . Monad m
@@ -19,14 +22,10 @@ strictDeref store = cata alg . lazyDeref store
   where
     alg :: Algebra (WithHash :+ m :+ NamedTreeLayer)
                    (m $ Fix (WithHash :+ NamedTreeLayer))
-    alg (C (p, C e)) =
-      do
-        e' <- e
-        e'' <- traverse id e'
-        pure $ In $ C (p, e'')
+    alg (C (p, C e)) = e >>= traverse id >>= pure . Fix . C . (p,)
 
 
--- construct a potentially-infinite tree-shaped stream of further values constructed by
+-- | construct a potentially-infinite tree-shaped stream of further values constructed by
 -- deref-ing hash pointers using a hash-addressed store. Allows for store returning multiple
 -- layers of tree structure in a single response (to enable future optimizations) via 'CoAttr'
 lazyDeref
@@ -44,27 +43,8 @@ lazyDeref store = futu alg
     handleCMTL (C (NamedEntity name e))
       = C . NamedEntity name $ fmap (handleMTL) e
 
-    handleMTL (In (C (Direct p e))) = Manual $ C (p, C . pure $ handleCMTL e)
-    handleMTL (In (C (Indirect p))) = Automatic p
-
-unexpanded
-  :: Pointer
-  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
-unexpanded p = In $ C (p, C Nothing)
-
-expanded
-  :: NamedTreeLayer $ Fix (WithHash :+ Maybe :+ NamedTreeLayer)
-  -> Pointer
-  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
-expanded x p = In $ C (p, C $ Just x)
-
--- todo better name?
-expandedShallow
-  :: forall g
-   . NamedTreeLayer $ (Fix (WithHash :+ g))
-  -> Pointer
-  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
-expandedShallow x = expanded (fmap (\(In (C (p,_))) -> In $ C (p, C Nothing)) x)
+    handleMTL (Fix (C (Direct p e))) = Manual $ C (p, C . pure $ handleCMTL e)
+    handleMTL (Fix (C (Indirect p))) = Automatic p
 
 -- todo: rename?
 haesfPointer :: forall f . Fix (WithHash :+ f) -> Pointer
