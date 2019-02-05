@@ -1,7 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
-
 module Store where
 
 --------------------------------------------
@@ -22,40 +18,37 @@ import           Util.MyCompose
 --------------------------------------------
 
 
--- | Some capability to interact with a global store. Used to abstract
+-- | Some capability to interact with some global store. Used to abstract
 --   over multiple impls, eg redis vs. local ioref store for tests
 data Store m
   = Store
-  { -- return type being 'Concrete' instead of 'Shallow' allows possible optimization:
-    -- returning multiple layers at once based on (eg) past usage patterns
+  { -- | given a pointer, fetch the corresponding entity. Provides type-level guarantee that
+    --   at least one level of structure is fetched 'NamedTreeLayer' while allowing for multiple
+    --   levels of structure to be returned in one call via 'MerkleTree' subnode type
     deref :: Pointer -> m $ NamedTreeLayer MerkleTree
+    -- | given a shallow layer of structure with subnodes identified by a pointer, store it.
     -- this allows for each store to use its own hash algorithm - not sure if I like that
   , uploadShallow :: NamedTreeLayer Pointer -> m Pointer
   }
 
-
-hoistStore :: (forall a. m1 a -> m2 a) -> Store m1 -> Store m2
-hoistStore f gs
-  = Store
-  { deref = \p -> f $ deref gs p
-  , uploadShallow = \smtl -> f $ uploadShallow gs smtl
-  }
-
-
-createTmpDir :: String -> IO FilePath -- todo this should really be bracket
+-- todo this should really be bracket pattern for cleanup
+createTmpDir :: String -> IO FilePath
 createTmpDir prefix = do
   sysTmp <- getTemporaryDirectory
-  x <- randomIO -- collision detection? lmao no lol #YOLO
+  x <- randomIO -- collision detection? lmao no,lol  #YOLO
   let dir = sysTmp ++ "/" ++ prefix ++ show (x :: Int)
   createDirectory dir
   putStrLn $ "created temp dir: " ++ dir
   pure dir
 
+
+-- | Filesystem backed store using a temp dir
 tmpFsStore :: IO $ Store $ ExceptT MerkleTreeLookupError IO
 tmpFsStore = do
   dir <- createTmpDir "merklestore"
   pure $ fsStore dir
 
+-- | Filesystem backed store using the provided dir
 fsStore :: FilePath -> Store $ ExceptT MerkleTreeLookupError IO
 fsStore root
   = Store
@@ -74,11 +67,11 @@ fsStore root
   }
   where
 
-    -- todo something cooler and more human-readable eg []
+    -- todo something cooler and more human-readable eg [a..z]
     f p = "pointer_" ++ show (unPointer p)
 
 
-
+-- | Store backed by in-memory IORef HashMap
 iorefStore :: IORef $ HashMap Pointer $ NamedTreeLayer Pointer
            -> Store (ExceptT MerkleTreeLookupError IO)
 iorefStore ioref

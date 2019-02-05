@@ -15,11 +15,27 @@ build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
+
+
 -- merkle-dag-compare
 executable mdc 
   main-is:             Main.hs
   -- other-modules:
-  -- other-extensions:
+
+
+  extensions: RankNTypes,
+              TypeOperators,
+              PolyKinds,
+              DeriveFunctor,
+              DeriveFoldable,
+              DeriveGeneric,
+              DeriveTraversable,
+              OverloadedStrings,
+              ScopedTypeVariables,
+              TupleSections
+
+
+
 
   ghc-options:     -Wall -Werror
 
