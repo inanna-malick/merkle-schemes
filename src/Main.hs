@@ -14,9 +14,8 @@ import           Data.IORef
 --------------------------------------------
 import           Compare (compareMerkleTrees)
 import           Errors
-import           Ingress (buildDirTree, outputDirTree)
-import           Merkle.Types (mtPointer, HashIdentifiedEntity(Indirect))
-import           Util.RecursionSchemes (Term(In))
+import           Ingress -- (buildDirTree, outputDirTree)
+import           Merkle.Types (mtPointer)
 import           Util.Util (mapErrUtil)
 import           Store
 --------------------------------------------
@@ -24,16 +23,16 @@ import           Store
 main :: IO ()
 main = do
   res' <- runExceptT $ do
-    store <- liftIO $ iorefStore <$> newIORef Map.empty
+    _store <- liftIO $ iorefStore <$> newIORef Map.empty
+    store <- liftIO $ tmpFsStore
     -- forget structure of merkle trees and retain only a pointer to the top level
-    let forgetStructure = In . Indirect . mtPointer
-
+    let forgetStructure = mtPointer
     before <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/before" "node1"
     after1 <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/after1" "node1"
     after2 <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/after2" "node1"
     after3 <- mapErrUtil InputError $ forgetStructure <$> buildDirTree store "examples/after3" "node2"
 
-    _ <- mapErrUtil CompareError $ do
+    mapErrUtil InputError $ do
       liftIO $ putStrLn "comparing before to after1"
       compareMerkleTrees store before after1 >>= liftIO . print
 

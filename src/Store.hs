@@ -3,25 +3,22 @@
 
 module Store where
 
-import Merkle.Types
-import Merkle.Tree.Types
-
 
 --------------------------------------------
+import qualified Data.Aeson as AE
+import           Control.Monad.Except
+import qualified Data.ByteString.Lazy as B
 import qualified Data.Hashable as Hash
 import           Data.HashMap.Strict (HashMap)
-import           Data.IORef
---------------------------------------------
-
-
---------------------------------------------
-import           Control.Monad.Except
 import qualified Data.HashMap.Strict as Map
+import           Data.IORef
+import           System.Directory (getTemporaryDirectory, createDirectory)
+import           System.Random (randomIO)
 --------------------------------------------
 import           Errors
+import           Merkle.Types
+import           Merkle.Tree.Types
 --------------------------------------------
-
--- import qualified Database.Redis.IO as Redis
 
 
 -- | Some capability to interact with a global store. Used to abstract
@@ -31,7 +28,7 @@ data Store m
   { -- return type being 'Concrete' instead of 'Shallow' allows possible optimization:
     -- returning multiple layers at once based on (eg) past usage patterns
     deref :: Pointer -> m ConcreteMerkleTreeLayer
-    -- kinda gross - this _has_ to do hashing but w/e lol fuck it
+    -- this allows for each store to use its own hash algorithm - not sure if I like that
   , uploadShallow :: ShallowMerkleTreeLayer -> m Pointer
   }
 
@@ -39,35 +36,41 @@ data Store m
 hoistStore :: (forall a. m1 a -> m2 a) -> Store m1 -> Store m2
 hoistStore f gs
   = Store
-  {
-    deref = \p -> f $ deref gs p
+  { deref = \p -> f $ deref gs p
   , uploadShallow = \smtl -> f $ uploadShallow gs smtl
   }
 
--- | Blah blah blah redis is bad - true, but also I can have it
---   running in docker in 2m and this is a toy project
--- redisStore :: IO (Store (ExceptT MerkleTreeLookupError IO))
--- redisStore = do
---   pool <- Redis.mkPool Redis.defSettings -- todo use bracket here
---   pure $
---   Store
---     { deref = \p -> do
---         liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via redis"
---         let key = Redis.Key $ undefined $ p
---         liftIO . Redis.runRedis $ Redis.get key
---         case x of
---           Nothing -> throwError $ EntityNotFoundInStore p
---           Just x  -> do
---             -- putStrLn $ "returning deref res: " ++ showT x
---             -- todo parse json
---             pure $ makeConcrete x
---     , uploadShallow = \smtl -> do
---         let pointer = Pointer $ Hash.hash smtl
---             key = Redis.Key $ undefined $ p
---             value = toJSON smtl
---         liftIO . Redis.runRedis $ Redis.set key value
---         pure pointer
---     }
+
+tmpFsStore :: IO (Store (ExceptT MerkleTreeLookupError IO))
+tmpFsStore = do
+  sysTmp <- getTemporaryDirectory
+  x <- randomIO
+  let dir = sysTmp ++ "/merklestore" ++ show (x :: Int)
+  createDirectory dir
+  putStrLn $ "using store: " ++ dir
+  pure $ fsStore dir
+
+fsStore :: FilePath -> Store (ExceptT MerkleTreeLookupError IO)
+fsStore root
+  = Store
+  { deref = \p -> do
+      liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via fs state store"
+      contents <- liftIO $ B.readFile (root ++ "/" ++ f p)
+      case AE.decode contents of
+        Nothing -> throwError $ EntityNotFoundInStore p
+        Just x  -> do
+          -- putStrLn $ "returning deref res via fs state store: " ++ ??? x
+          pure $ makeConcrete x
+  , uploadShallow = \smtl -> do
+      let p = Pointer $ Hash.hash smtl
+          -- todo something cooler
+      liftIO $ B.writeFile (root ++ "/" ++ f p) (AE.encode smtl)
+      pure p
+  }
+  where
+    f p = "pointer_" ++ show (unPointer p)
+
+
 
 iorefStore :: IORef (HashMap Pointer ShallowMerkleTreeLayer)
            -> Store (ExceptT MerkleTreeLookupError IO)
