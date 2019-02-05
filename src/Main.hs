@@ -6,7 +6,7 @@ import           Control.Monad.Except (runExceptT, liftIO)
 import           Commands
 import           Compare (compareMerkleTrees)
 import           Errors
-import           Ingress -- (buildDirTree, outputDirTree)
+import           FileIO -- (buildDirTree, outputDirTree)
 import           Merkle.Types
 import           Merkle.Tree.Types
 import           Util.MyCompose

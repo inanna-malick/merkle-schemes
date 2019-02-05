@@ -14,11 +14,11 @@ strictDeref
    . Monad m
   => Store m
   -> Pointer
-  -> m $ Term (WithHash :+ NamedTreeLayer)
+  -> m $ Fix (WithHash :+ NamedTreeLayer)
 strictDeref store = cata alg . lazyDeref store
   where
     alg :: Algebra (WithHash :+ m :+ NamedTreeLayer)
-                   (m $ Term (WithHash :+ NamedTreeLayer))
+                   (m $ Fix (WithHash :+ NamedTreeLayer))
     alg (C (p, C e)) =
       do
         e' <- e
@@ -34,7 +34,7 @@ lazyDeref
    . Monad m
   => Store m
   -> Pointer
-  -> Term (WithHash :+ m :+ NamedTreeLayer)
+  -> Fix (WithHash :+ m :+ NamedTreeLayer)
 lazyDeref store = futu alg
   where
     alg :: CVCoAlgebra (WithHash :+ m :+ NamedTreeLayer)
@@ -49,30 +49,30 @@ lazyDeref store = futu alg
 
 unexpanded
   :: Pointer
-  -> Term (WithHash :+ Maybe :+ NamedTreeLayer)
+  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
 unexpanded p = In $ C (p, C Nothing)
 
 expanded
-  :: NamedTreeLayer $ Term (WithHash :+ Maybe :+ NamedTreeLayer)
+  :: NamedTreeLayer $ Fix (WithHash :+ Maybe :+ NamedTreeLayer)
   -> Pointer
-  -> Term (WithHash :+ Maybe :+ NamedTreeLayer)
+  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
 expanded x p = In $ C (p, C $ Just x)
 
 -- todo better name?
 expandedShallow
   :: forall g
-   . NamedTreeLayer $ (Term (WithHash :+ g))
+   . NamedTreeLayer $ (Fix (WithHash :+ g))
   -> Pointer
-  -> Term (WithHash :+ Maybe :+ NamedTreeLayer)
+  -> Fix (WithHash :+ Maybe :+ NamedTreeLayer)
 expandedShallow x = expanded (fmap (\(In (C (p,_))) -> In $ C (p, C Nothing)) x)
 
 -- todo: rename?
-haesfPointer :: forall f . Term (WithHash :+ f) -> Pointer
-haesfPointer = fst . getCompose . out
+haesfPointer :: forall f . Fix (WithHash :+ f) -> Pointer
+haesfPointer = fst . getCompose . unFix
 
 -- compelling argument for type aliases right here
-haesfDeref :: Term (WithHash :+ m :+ NamedTreeLayer)
-            -> m $ NamedTreeLayer (Term (WithHash :+ m :+ NamedTreeLayer))
-haesfDeref   = getCompose . snd . getCompose . out
+haesfDeref :: Fix (WithHash :+ m :+ NamedTreeLayer)
+            -> m $ NamedTreeLayer (Fix (WithHash :+ m :+ NamedTreeLayer))
+haesfDeref   = getCompose . snd . getCompose . unFix
 
 type WithHash = (,) Pointer

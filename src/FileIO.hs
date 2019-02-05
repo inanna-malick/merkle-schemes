@@ -1,5 +1,6 @@
--- todo rename to indicate this does more generic filestore IO
-module Ingress (buildDirTree, outputDirTree) where
+-- | Functions for interacting with the filesystem to
+-- create dir trees from merkle trees or vice versa
+module FileIO (buildDirTree, outputDirTree) where
 
 --------------------------------------------
 import           Control.Monad.Except
@@ -15,7 +16,7 @@ import           Merkle.Types (Pointer, HashIdentifiedEntity(..))
 import           Store
 --------------------------------------------
 
--- | write tree to file path
+-- | Write tree to file path
 outputDirTree
   :: MonadIO m
   => Store m
@@ -27,7 +28,7 @@ outputDirTree store outdir pointer = do
   liftIO $ evalStateT (cata alg derefed) [outdir]
 
   where
-    alg :: Algebra ((,) Pointer :+ NamedEntity :+ Tree) (StateT [FilePath] IO ())
+    alg :: Algebra (WithHash :+ NamedTreeLayer) (StateT [FilePath] IO ())
     alg (C (_p, (C (NamedEntity name (Leaf body)))))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
@@ -60,11 +61,11 @@ addDirTreeToStore
   :: forall m
    . Monad m
   => Store m
-  -> Term (m :+ NamedEntity :+ Tree)
+  -> Fix (m :+ NamedTreeLayer)
   -> m MerkleTree
 addDirTreeToStore store = cata alg
   where
-    alg :: Algebra (m :+ NamedEntity :+ Tree) (m MerkleTree)
+    alg :: Algebra (m :+ NamedTreeLayer) (m MerkleTree)
     alg (C getEntity) = do
       (C (NamedEntity name entity')) <- getEntity
       entity <- NamedEntity name <$> case entity' of
@@ -82,10 +83,10 @@ buildDirTree'
   -- tree structure _without_ pointer annotation
   -- type-level guarantee that there is no hash identified
   -- entity indirection allowed here
-  -> Term (m :+ NamedEntity :+ Tree)
+  -> Fix (m :+ NamedTreeLayer)
 buildDirTree' = ana alg
   where
-    alg :: CoAlgebra (m :+ NamedEntity :+ Tree) FilePath
+    alg :: CoAlgebra (m :+ NamedTreeLayer) FilePath
     alg path = C $ do
       -- todo: validation of input file path, ideally some 'probefile :: FilePath -> IO FileType' widget
       isFile <- liftIO $ Dir.doesFileExist path

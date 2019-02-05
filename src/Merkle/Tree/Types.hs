@@ -9,7 +9,7 @@ import           Data.Text
 --------------------------------------------
 import           Merkle.Types (Pointer(..), HashIdentifiedEntity(..), mtPointer)
 import           Util.MyCompose
-import           Util.RecursionSchemes (Term(..))
+import           Util.RecursionSchemes (Fix(..))
 --------------------------------------------
 
 type Name = String
@@ -30,7 +30,7 @@ type NamedTreeLayer = NamedEntity :+ Tree
 
 -- | merkle tree that at any level (including the top) can either consist of
 --   hash-addressed pointers to nodes or substantiated named tree nodes
-type MerkleTree = Term (HashIdentifiedEntity :+ NamedEntity :+ Tree)
+type MerkleTree = Fix (HashIdentifiedEntity :+ NamedEntity :+ Tree)
 
 -- | merkle tree in which the top layer is known to be substantiated and
 --   all sub-nodes are represented using hash addressed pointers
