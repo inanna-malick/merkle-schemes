@@ -36,9 +36,13 @@ compareMerkleTrees'
   -- no knowledge about actual monad stack - just knows it can
   -- sequence actions in it to deref successive layers (because monad)
    . Monad m
-  => Term (HashAnnotatedEffectfulStreamF m)
-  -> Term (HashAnnotatedEffectfulStreamF m)
-  -> m ([Diff], (PartiallyExpandedHashAnnotatedTree, PartiallyExpandedHashAnnotatedTree))
+  => Term (WithHash :+ m :+ NamedTreeLayer)
+  -> Term (WithHash :+ m :+ NamedTreeLayer)
+  -> m ( [Diff]
+       , ( Term (WithHash :+ Maybe :+ NamedTreeLayer)
+         , Term (WithHash :+ Maybe :+ NamedTreeLayer)
+         )
+       )
 compareMerkleTrees' t1 t2
   | haesfPointer t1 == haesfPointer t2
       -- no diff, no need to explore further here
@@ -51,12 +55,12 @@ compareMerkleTrees' t1 t2
 
   where
     compareDerefed
-      :: (NamedEntity :+ Tree) (Term (HashAnnotatedEffectfulStreamF m))
-      -> (NamedEntity :+ Tree) (Term (HashAnnotatedEffectfulStreamF m))
+      :: NamedTreeLayer $ Term (WithHash :+ m :+ NamedTreeLayer)
+      -> NamedTreeLayer $ Term (WithHash :+ m :+ NamedTreeLayer)
       -> m ( [Diff]
            -- functions used to build up structure - in this fn we have no access to pointers (having already checked ==)
-           , ( Pointer -> PartiallyExpandedHashAnnotatedTree
-             , Pointer -> PartiallyExpandedHashAnnotatedTree
+           , ( Pointer -> Term (WithHash :+ Maybe :+ NamedTreeLayer)
+             , Pointer -> Term (WithHash :+ Maybe :+ NamedTreeLayer)
              )
            )
     compareDerefed ne1@(C (NamedEntity name1 entity1)) ne2@(C (NamedEntity name2 entity2))
@@ -89,50 +93,46 @@ compareMerkleTrees' t1 t2
               let exploredNs1 = filter (not . flip Set.member (ns2Pointers) . haesfPointer) ns1
                   exploredNs2 = filter (not . flip Set.member (ns1Pointers) . haesfPointer) ns2
                   -- for construting 'unexpanded' branches
-                  unexploredNs1 :: [PartiallyExpandedHashAnnotatedTree]
+                  unexploredNs1 :: [Term (WithHash :+ Maybe :+ NamedTreeLayer)]
                   unexploredNs1  = fmap (unexpanded . haesfPointer) $ filter (flip Set.member (ns2Pointers) . haesfPointer) ns1
-                  unexploredNs2 :: [PartiallyExpandedHashAnnotatedTree]
+                  unexploredNs2 :: [Term (WithHash :+ Maybe :+ NamedTreeLayer)]
                   unexploredNs2  = fmap (unexpanded . haesfPointer) $ filter (flip Set.member (ns1Pointers) . haesfPointer) ns2
 
-              derefedNs1 <- traverse (\x -> fmap (haesfPointer x,) $ haesfDeref x) exploredNs1
-              derefedNs2 <- traverse (\x -> fmap (haesfPointer x,) $ haesfDeref x) exploredNs2
+              derefedNs1 <- traverse (\x -> fmap C . fmap (haesfPointer x,) $ haesfDeref x) exploredNs1
+              derefedNs2 <- traverse (\x -> fmap C . fmap (haesfPointer x,) $ haesfDeref x) exploredNs2
 
-              let mkByNameMap :: [(Pointer, HashAnnotatedEffectfulStreamLayer m)]
-                              -> HashMap Name (Pointer, HashAnnotatedEffectfulStreamLayer m)
-                  mkByNameMap ns = Map.fromList $ fmap (\(p, C e) -> (neName e, (p, C e))) ns
+              -- MAIN PROBLEM: layer + term type is fucking ungainly, ugly
+              let mkByNameMap :: [WithHash :+ NamedTreeLayer $ Term (WithHash :+ m :+ NamedTreeLayer)]
+                              -> HashMap Name $ WithHash :+ NamedTreeLayer
+                                              $ Term (WithHash :+ m :+ NamedTreeLayer)
+                  mkByNameMap ns = Map.fromList $ fmap (\e@(C (_, C (NamedEntity n _))) -> (n, e)) ns
+                  resolveMapDiff t = case t of -- todo lambdacase
+                    This (n,_) -> pure ( [EntityDeleted n]
+                                       , Nothing
+                                       )
+
+                    These (_, C (p1,a)) (_, C (p2,b)) -> do
+                      (diffs, (de1,de2)) <- compareDerefed a b
+                      pure (diffs, Just (de1 p1, de2 p2))
+
+                    That (n,_) -> pure ( [EntityCreated n]
+                                       , Nothing
+                                       )
+
 
               recurseRes <-
                 traverse resolveMapDiff $ mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
 
+              -- kinda gross - basically just taking all the results and hammering them into the right shape
               let diffs = join $ fmap fst recurseRes
                   rExpansions1 = recurseRes >>= (maybe [] (pure . fst) . snd)
                   rExpansions2 = recurseRes >>= (maybe [] (pure . snd) . snd)
 
-                  expansions1, expansions2 :: Pointer -> PartiallyExpandedHashAnnotatedTree
-                  expansions1
-                    = expanded $ C $ NamedEntity name1 $ Node $ unexploredNs1 ++ rExpansions1
-                  expansions2
-                    = expanded $ C $ NamedEntity name1 $ Node $ unexploredNs2 ++ rExpansions2
+                  expand name nodes = expanded $ C $ NamedEntity name $ Node nodes
+                  expansions1 = expand name1 $ unexploredNs1 ++ rExpansions1
+                  expansions2 = expand name2 $ unexploredNs2 ++ rExpansions2
 
               pure (diffs, (expansions1, expansions2))
-
-    haesfPointer :: forall f . Term ((,) Pointer :+ f) -> Pointer
-    haesfPointer = fst . getCompose . out
-
-    haesfDeref :: Term (HashAnnotatedEffectfulStreamF m)
-               -> m (HashAnnotatedEffectfulStreamLayer m)
-    haesfDeref   = getCompose . snd . getCompose . out
-
-    resolveMapDiff :: These (Name, (Pointer, HashAnnotatedEffectfulStreamLayer m))
-                            (Name, (Pointer, HashAnnotatedEffectfulStreamLayer m))
-                   -> m ([Diff], Maybe (PartiallyExpandedHashAnnotatedTree, PartiallyExpandedHashAnnotatedTree))
-    resolveMapDiff = these
-      (pure . (,Nothing) . pure . EntityDeleted . fst) -- shit - no expansion
-      (\(_, (p1,a)) (_, (p2,b)) -> do
-         (diffs, (de1,de2)) <- compareDerefed a b
-         pure (diffs, Just (de1 p1, de2 p2))
-      )
-      (pure . (,Nothing) . pure . EntityCreated . fst) -- shit - no expansion
 
 -- | Compare two merkle trees for equality, producing diffs and a record of expansions/derefs performed
 --   lazily fetches structure of the two trees such that only the parts required
@@ -145,7 +145,12 @@ compareMerkleTrees
   => Store m
   -> Pointer -- top level interface is just pointers!
   -> Pointer -- top level interface is just pointers!
-  -> m ([Diff], (PartiallyExpandedHashAnnotatedTree, PartiallyExpandedHashAnnotatedTree))
+  -> m ( [Diff] -- resulting diffs
+       -- partially substantiated trees - can be used to track how far tree traversal went
+       , ( Term (WithHash :+ Maybe :+ NamedTreeLayer)
+         , Term (WithHash :+ Maybe :+ NamedTreeLayer)
+         )
+       )
 compareMerkleTrees store mt1 mt2 =
   -- transform merkle trees (hash-addressed indirection) into lazily streaming data structures
   -- before passing to diffing alg

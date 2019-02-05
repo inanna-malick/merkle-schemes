@@ -37,16 +37,17 @@ data NamedEntity a
   , neEntity :: a
   } deriving (Eq, Show, Functor, Foldable, Traversable)
 
+
+-- | TODO DOX
+type NamedTreeLayer = NamedEntity :+ Tree
+
 -- | merkle tree that at any level (including the top) can either consist of
 --   hash-addressed pointers to nodes or substantiated named tree nodes
 type MerkleTree = Term (HashIdentifiedEntity :+ NamedEntity :+ Tree)
--- | merkle tree in which the top layer is known to be substantiated and
---   sub-nodes can be either hash addressed pointers or direct references
-type ConcreteMerkleTreeLayer = (NamedEntity :+ Tree) MerkleTree
 
 -- | merkle tree in which the top layer is known to be substantiated and
 --   all sub-nodes are represented using hash addressed pointers
--- newtype and not type alias so we can have typeclass instances
+--   newtype and not type alias so we can have clean typeclass instances
 newtype ShallowMerkleTreeLayer = SMTL { unSMTL :: (NamedEntity :+ Tree) Pointer}
 
 instance Hash.Hashable ShallowMerkleTreeLayer where
@@ -87,4 +88,4 @@ makeConcrete :: (NamedEntity :+ Tree) Pointer -> (NamedEntity :+ Tree) MerkleTre
 makeConcrete = fmap (In . C . Indirect)
 
 
-type GlobalStore = IORef (HashMap Pointer ConcreteMerkleTreeLayer)
+type GlobalStore = IORef (HashMap Pointer  ((NamedEntity :+ Tree) MerkleTree))
