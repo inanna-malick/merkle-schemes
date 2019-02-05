@@ -1,6 +1,3 @@
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
-
 -- | in this module we commit the cardinal haskell sin...
 --   ...defining our own type-level operators for convenience...
 module Util.MyCompose where
