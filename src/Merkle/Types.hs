@@ -5,7 +5,7 @@ import           Data.Aeson
 import qualified Data.Hashable as Hash
 import           GHC.Generics (Generic)
 --------------------------------------------
-import           Util.RecursionSchemes (Term(..))
+import           Util.RecursionSchemes (Fix(..))
 import           Util.MyCompose
 --------------------------------------------
 
@@ -22,7 +22,7 @@ data HashIdentifiedEntity a
   | Indirect Pointer       -- indirect ref is just a pointer in some hash-addressed store
   deriving (Eq, Show, Functor)
 
-mtPointer :: Term (HashIdentifiedEntity :+ f) -> Pointer
+mtPointer :: Fix (HashIdentifiedEntity :+ f) -> Pointer
 mtPointer (In (C (Direct p _))) = p
 mtPointer (In (C (Indirect p))) = p
 
