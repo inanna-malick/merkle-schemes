@@ -60,10 +60,8 @@ buildDirTree
   :: MonadIO m
   => Store m
   -> FilePath
-  -> FilePath
   -> m MerkleTree
-buildDirTree store path filename
-    = addDirTreeToStore store $ buildDirTree' path filename
+buildDirTree store = addDirTreeToStore store . buildDirTree'
 
 -- | annotate tree nodes with hash, adding them to some global store during this traversal
 -- NOTE: fully consumes potentially-infinite effectful stream and may not terminate
@@ -90,32 +88,32 @@ buildDirTree'
   :: forall m
    . MonadIO m
   => FilePath
-  -> FilePath
   -- tree structure _without_ pointer annotation
   -- type-level guarantee that there is no hash identified
   -- entity indirection allowed here
   -> Term (Compose m (NamedEntity Tree))
-buildDirTree' = curry (ana alg)
+buildDirTree' = ana alg
   where
-    alg :: CoAlgebra (Compose m (NamedEntity Tree)) (FilePath, FilePath)
-    alg (path, filename) = Compose $ do
+    justTheName :: String -> String -- hacky hax but it works - take just the name given a file path
+    justTheName = reverse . takeWhile (/= '/') . reverse
+
+    alg :: CoAlgebra (Compose m (NamedEntity Tree)) FilePath
+    alg path = Compose $ do
       -- todo: validation of input file path, ideally some 'probefile :: FilePath -> IO FileType' widget
-      let fullpath = path ++ "/" ++ filename
-      -- putStrLn $ "run buildDirTree on: " ++ fullpath
-      isFile <- liftIO $ Dir.doesFileExist fullpath
+      isFile <- liftIO $ Dir.doesFileExist path
       if isFile
         then do
-          fc <- liftIO $ readFile fullpath
-          pure $ NamedEntity filename $ Leaf fc
+          fc <- liftIO $ readFile path
+          pure $ NamedEntity (justTheName path) $ Leaf fc
         else do
-          isDir <- liftIO $ Dir.doesDirectoryExist fullpath
+          isDir <- liftIO $ Dir.doesDirectoryExist path
           if isDir
-            then fmap ( NamedEntity filename
+            then fmap ( NamedEntity (justTheName path)
                       . Node
-                      . fmap (fullpath,)
+                      . fmap (\x -> path ++ "/" ++ x)
                       . filter (/= ".")
                       . filter (/= "..")
                       )
                . liftIO
-               $ Dir.getDirectoryContents fullpath
-            else fail ("file read error: unexpected type at " ++ fullpath)
+               $ Dir.getDirectoryContents path
+            else fail ("file read error: unexpected type at " ++ path)

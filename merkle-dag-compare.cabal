@@ -15,7 +15,8 @@ build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
-executable merkle-dag-compare
+-- merkle-dag-compare
+executable mdc 
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
@@ -31,7 +32,9 @@ executable merkle-dag-compare
                        mtl,
                        unordered-containers,
                        pretty,
+                       optparse-applicative,
                        random,
+                       semigroups,
                        text,
                        transformers
   hs-source-dirs:      src
