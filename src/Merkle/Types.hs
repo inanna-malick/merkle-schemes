@@ -23,7 +23,7 @@ data HashIdentifiedEntity a
   deriving (Eq, Show, Functor)
 
 -- note - can probably merge this with ((,) Pointer :+ ..)
-mtPointer :: Fix (HashIdentifiedEntity :+ f) -> Pointer
+mtPointer :: Fix $ HashIdentifiedEntity :+ f -> Pointer
 mtPointer (Fix (C (Direct p _))) = p
 mtPointer (Fix (C (Indirect p))) = p
 

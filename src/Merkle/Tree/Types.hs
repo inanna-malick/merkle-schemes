@@ -66,13 +66,13 @@ instance FromJSON ShallowMerkleTreeLayer where
 
 
 -- | Forget information at the term level - drop any direct references
-makeShallow :: (NamedEntity :+ Tree) MerkleTree -> (NamedEntity :+ Tree) Pointer
+makeShallow :: NamedEntity :+ Tree $ MerkleTree -> NamedEntity :+ Tree $ Pointer
 makeShallow = fmap mtPointer
 
 -- | Forget information at the type level
 --   turn a value known to be shallow to a potentially-deep one
-makeConcrete :: (NamedEntity :+ Tree) Pointer -> (NamedEntity :+ Tree) MerkleTree
+makeConcrete :: NamedEntity :+ Tree $ Pointer -> NamedEntity :+ Tree $ MerkleTree
 makeConcrete = fmap (Fix . C . Indirect)
 
 
-type GlobalStore = IORef (HashMap Pointer  ((NamedEntity :+ Tree) MerkleTree))
+type GlobalStore = IORef (HashMap Pointer (NamedEntity :+ Tree $ MerkleTree))
