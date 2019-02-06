@@ -32,8 +32,8 @@ compareMerkleTrees
   -> Pointer -- top level interface is just pointers!
   -> m ( [Diff] -- resulting diffs
        -- partially substantiated trees - can be used to track how far tree traversal went
-       , ( Fix $ WithHash :+ Maybe :+ NamedTreeLayer
-         , Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+       , ( Fix $ WithHash :+ Maybe :+ Named :+ Tree
+         , Fix $ WithHash :+ Maybe :+ Named :+ Tree
          )
        )
 compareMerkleTrees store mt1 mt2 =
@@ -49,11 +49,11 @@ compareMerkleTrees'
   -- no knowledge about actual monad stack - just knows it can
   -- sequence actions in it to deref successive layers (because monad)
    . Monad m
-  => Fix $ WithHash :+ m :+ NamedTreeLayer
-  -> Fix $ WithHash :+ m :+ NamedTreeLayer
+  => Fix $ WithHash :+ m :+ Named :+ Tree
+  -> Fix $ WithHash :+ m :+ Named :+ Tree
   -> m ( [Diff]
-       , ( Fix $ WithHash :+ Maybe :+ NamedTreeLayer
-         , Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+       , ( Fix $ WithHash :+ Maybe :+ Named :+ Tree
+         , Fix $ WithHash :+ Maybe :+ Named :+ Tree
          )
        )
 compareMerkleTrees' t1 t2
@@ -68,12 +68,12 @@ compareMerkleTrees' t1 t2
 
   where
     compareDerefed
-      :: NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer
-      -> NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer
+      :: Named :+ Tree $ Fix $ WithHash :+ m :+ Named :+ Tree
+      -> Named :+ Tree $ Fix $ WithHash :+ m :+ Named :+ Tree
       -> m ( [Diff]
            -- functions used to build up structure - in this fn we have no access to pointers (having already checked ==)
-           , ( Pointer -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
-             , Pointer -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+           , ( Pointer -> Fix $ WithHash :+ Maybe :+ Named :+ Tree
+             , Pointer -> Fix $ WithHash :+ Maybe :+ Named :+ Tree
              )
            )
     compareDerefed ne1@(C (name1, entity1)) ne2@(C (name2, entity2))
@@ -115,17 +115,17 @@ compareMerkleTrees' t1 t2
               let exploredNs1 = filter (not . flip Set.member (ns2Pointers) . pointer) ns1
                   exploredNs2 = filter (not . flip Set.member (ns1Pointers) . pointer) ns2
                   -- for construting 'unexpanded' branches
-                  unexploredNs1 :: [Fix $ WithHash :+ Maybe :+ NamedTreeLayer]
+                  unexploredNs1 :: [Fix $ WithHash :+ Maybe :+ Named :+ Tree]
                   unexploredNs1  = fmap (unexpanded . pointer) $ filter (flip Set.member (ns2Pointers) . pointer) ns1
-                  unexploredNs2 :: [Fix $ WithHash :+ Maybe :+ NamedTreeLayer]
+                  unexploredNs2 :: [Fix $ WithHash :+ Maybe :+ Named :+ Tree]
                   unexploredNs2  = fmap (unexpanded . pointer) $ filter (flip Set.member (ns1Pointers) . pointer) ns2
 
               derefedNs1 <- traverse (\x -> fmap C . fmap (pointer x,) $ derefLayer x) exploredNs1
               derefedNs2 <- traverse (\x -> fmap C . fmap (pointer x,) $ derefLayer x) exploredNs2
 
-              let mkByNameMap :: [WithHash :+ NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer]
-                              -> HashMap Name $ WithHash :+ NamedTreeLayer
-                                              $ Fix $ WithHash :+ m :+ NamedTreeLayer
+              let mkByNameMap :: [WithHash :+ Named :+ Tree $ Fix $ WithHash :+ m :+ Named :+ Tree]
+                              -> HashMap Name $ WithHash :+ Named :+ Tree
+                                              $ Fix $ WithHash :+ m :+ Named :+ Tree
                   mkByNameMap ns = Map.fromList $ fmap (\e@(C (_, C (n, _))) -> (n, e)) ns
                   resolveMapDiff
                     (This (n,_)) = pure ( [EntityDeleted n]
@@ -160,24 +160,24 @@ compareMerkleTrees' t1 t2
 
 unexpanded
   :: Pointer
-  -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+  -> Fix $ WithHash :+ Maybe :+ Named :+ Tree
 unexpanded p = Fix $ C (p, C Nothing)
 
 expanded
-  :: NamedTreeLayer $ Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+  :: Named :+ Tree $ Fix $ WithHash :+ Maybe :+ Named :+ Tree
   -> Pointer
-  -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+  -> Fix $ WithHash :+ Maybe :+ Named :+ Tree
 expanded x p = Fix $ C (p, C $ Just x)
 
 -- todo better name?
 expandedShallow
   :: forall g
-   . NamedTreeLayer $ (Fix (WithHash :+ g))
+   . Named :+ Tree $ (Fix (WithHash :+ g))
   -> Pointer
-  -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
+  -> Fix $ WithHash :+ Maybe :+ Named :+ Tree
 expandedShallow x = expanded (fmap (\(Fix (C (p,_))) -> Fix $ C (p, C Nothing)) x)
 
 
-derefLayer :: Fix $ WithHash :+ m :+ NamedTreeLayer
-           -> m $ NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer
-derefLayer   = getCompose . snd . getCompose . unFix
+derefLayer :: Fix $ WithHash :+ m :+ Named :+ Tree
+           -> m $ Named :+ Tree $ Fix $ WithHash :+ m :+ Named :+ Tree
+derefLayer   = getCompose . snd . getCompose . unfix

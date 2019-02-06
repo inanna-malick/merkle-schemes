@@ -2,10 +2,10 @@ module Merkle.Types where
 
 --------------------------------------------
 import           Data.Aeson
+import           Data.Functor.Foldable
 import qualified Data.Hashable as Hash
 import           GHC.Generics (Generic)
 --------------------------------------------
-import           Util.RecursionSchemes (Fix(..))
 import           Util.MyCompose
 --------------------------------------------
 
@@ -28,4 +28,4 @@ instance ToJSON Pointer where
 type WithHash = (,) Pointer
 
 pointer :: forall f . Fix $ WithHash :+ f -> Pointer
-pointer = fst . getCompose . unFix
+pointer = fst . getCompose . unfix

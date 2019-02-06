@@ -12,20 +12,18 @@ import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
 --------------------------------------------
-import qualified Data.Functor.Foldable as FUK
-
 
 -- | Write tree to file path (using strict tree)
 writeTree'
   :: MonadIO m
   => FilePath
-  -> FUK.Fix NamedTreeLayer
+  -> Fix $ Named :+ Tree
   -> m ()
 writeTree' outdir tree = do
-  liftIO $ evalStateT (FUK.cata alg tree) [outdir]
+  liftIO $ evalStateT (cata alg tree) [outdir]
 
   where
-    alg :: Algebra NamedTreeLayer (StateT [FilePath] IO ())
+    alg :: Algebra (Named :+ Tree) (StateT [FilePath] IO ())
     alg (C (name, (Leaf body)))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
@@ -45,13 +43,13 @@ writeTree' outdir tree = do
 writeTree
   :: MonadIO m
   => FilePath
-  -> Fix NamedTreeLayer
+  -> Fix $ Named :+ Tree
   -> m ()
 writeTree outdir tree = do
-  liftIO $ evalStateT (FUK.cata alg tree) [outdir]
+  liftIO $ evalStateT (cata alg tree) [outdir]
 
   where
-    alg :: Algebra NamedTreeLayer (StateT [FilePath] IO ())
+    alg :: Algebra (Named :+ Tree) (StateT [FilePath] IO ())
     alg (C (name, (Leaf body)))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
@@ -74,10 +72,10 @@ readTree
   -- tree structure _without_ pointer annotation
   -- type-level guarantee that there is no hash identified
   -- entity indirection allowed here
-  -> Fix (m :+ NamedTreeLayer)
+  -> Fix (m :+ (Named :+ Tree))
 readTree = ana alg
   where
-    alg :: CoAlgebra (m :+ NamedTreeLayer) FilePath
+    alg :: CoAlgebra (m :+ Named :+ Tree) FilePath
     alg path = C $ do
       -- todo: validation of input file path, ideally some 'probefile :: FilePath -> IO FileType' widget
       isFile <- liftIO $ Dir.doesFileExist path

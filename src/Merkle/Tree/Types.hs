@@ -4,15 +4,13 @@ module Merkle.Tree.Types where
 
 --------------------------------------------
 import           Data.Aeson
+import           Data.Functor.Foldable
 import qualified Data.Hashable as Hash
 import           Data.Text
 --------------------------------------------
 import           Merkle.Types
 import           Util.MyCompose
-import           Util.RecursionSchemes (Fix(..))
 --------------------------------------------
-import           Data.Functor.Foldable (Base, Recursive(..))
-import qualified Data.Functor.Foldable as F
 
 type Name = String
 
@@ -22,56 +20,12 @@ data Tree a = Node [a] | Leaf String deriving (Eq, Show, Functor, Foldable, Trav
 -- | Named entity
 type Named = (,) Name
 
--- | TODO DELETE?
-type NamedTreeLayer = Named :+ Tree
-
-data NamedTree = NamedNode Name [NamedTree] | NamedLeaf Name String
-type instance Base NamedTree = Named :+ Tree
-instance Recursive NamedTree where
-  project (NamedNode n ns) = C (n, Node ns)
-  project (NamedLeaf n b)  = C (n, Leaf b)
-
-instance F.Corecursive NamedTree where
-  embed (C (n, Node ns)) = (NamedNode n ns)
-  embed (C (n, Leaf b)) = (NamedLeaf n b)
-
--- ok, so I can write the same functions over NamedTree as I write over NamedTreeLayer
-testCata :: NamedTree -> String
-testCata = F.cata (alg)
-  where
-    alg (C (n, Leaf b)) = n ++ b
-    alg (C (n, Node ns)) = n ++ show ns
-
-
-testAna :: String -> NamedTree
-testAna = F.ana alg
-  where
-    alg "" = (C ("foo", Leaf "bar"))
-    alg _  = (C ("bar", Node ["", ""]))
-
--- data HashedNamedTree = HashedNamedNode Pointer Name [HashedNamedTree] | HashedNamedLeaf Pointer Name String
--- type instance Base HashedNamedTree = WithHash :+ Named :+ Tree
--- instance Recursive HashedNamedTree where
---   project (HashedNamedNode p n ns) = C (p, C (n, Node ns))
---   project (HashedNamedLeaf p n b)  = C (p, C (n, Leaf b))
-
--- data LazyHashedNamedTree
---   = Indirection Pointer
---   | DirectHashedNamedNode Pointer Name [LazyHashedNamedTree]
---   | DirectHashedNamedLeaf Pointer Name String
--- type instance Base LazyHashedNamedTree = WithHash :+ Maybe :+ Named :+ Tree
--- instance Recursive LazyHashedNamedTree where
---   project (DirectHashedNamedNode p n ns) = C (p, C . Just $ C (n, Node ns))
---   project (DirectHashedNamedLeaf p n b)  = C (p, C . Just $ C (n, Leaf b))
---   project (Indirection p)                = C (p, C Nothing)
-
-
 -- | merkle tree that at any level (including the top) can either consist of
 --   hash-addressed pointers to nodes or substantiated named tree nodes paired with their pointer
-type LazyMerkleTree = Fix (WithHash :+ Maybe :+ NamedTreeLayer)
+type LazyMerkleTree = Fix (WithHash :+ Maybe :+ Named :+ Tree)
 
 -- | merkle tree that has all nodes fully substantiated
-type StrictMerkleTree = Fix (WithHash :+ NamedTreeLayer)
+type StrictMerkleTree = Fix (WithHash :+ Named :+ Tree)
 
 -- | merkle tree in which the top layer is known to be substantiated and
 --   all sub-nodes are represented using hash addressed pointers

@@ -23,12 +23,12 @@ import           Util.RecursionSchemes
 data Store m
   = Store
   { -- | given a pointer, fetch the corresponding entity. Provides type-level guarantee that
-    --   at least one level of structure is fetched 'NamedTreeLayer' while allowing for multiple
+    --   at least one level of structure is fetched '(Named :+ Tree)' while allowing for multiple
     --   levels of structure to be returned in one call via 'MerkleTree' subnode type
-    sDeref :: Pointer -> m $ NamedTreeLayer LazyMerkleTree
+    sDeref :: Pointer -> m $ Named :+ Tree $ LazyMerkleTree
     -- | given a shallow layer of structure with subnodes identified by a pointer, store it.
     -- this allows for each store to use its own hash algorithm - not sure if I like that
-  , sUploadShallow :: NamedTreeLayer Pointer -> m Pointer
+  , sUploadShallow :: Named :+ Tree $ Pointer -> m Pointer
   }
 
 -- todo this should really be bracket pattern for cleanup
@@ -76,7 +76,7 @@ fsStore root
 type GlobalStore = IORef (HashMap Pointer (Named :+ Tree $ LazyMerkleTree))
 
 -- | Store backed by in-memory IORef HashMap
-iorefStore :: IORef $ HashMap Pointer $ NamedTreeLayer Pointer
+iorefStore :: IORef $ HashMap Pointer $ Named :+ Tree $ Pointer
            -> Store $ ExceptT MerkleTreeLookupError IO
 iorefStore ioref
   = Store
@@ -101,11 +101,11 @@ addTreeToStore
   :: forall m
    . Monad m
   => Store m
-  -> Fix NamedTreeLayer
-  -> m $ Fix $ WithHash :+ NamedTreeLayer
+  -> Fix (Named :+ Tree)
+  -> m $ Fix $ WithHash :+ (Named :+ Tree)
 addTreeToStore store = cata alg
   where
-    alg :: Algebra NamedTreeLayer (m $ Fix $ WithHash :+ NamedTreeLayer)
+    alg :: Algebra (Named :+ Tree) (m $ Fix $ WithHash :+ Named :+ Tree)
     alg (C (name, entity')) = do
       entity <- (name,) <$> case entity' of
         Leaf body -> pure $ Leaf body

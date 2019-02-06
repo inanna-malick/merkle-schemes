@@ -19,6 +19,7 @@ executable mdc
               OverloadedStrings,
               ScopedTypeVariables,
               TupleSections
+              TypeFamilies
 
   ghc-options:     -Wall -Werror
 
@@ -27,6 +28,7 @@ executable mdc
                        aeson,
                        containers,
                        directory,
+                       free,
                        hashable,
                        mtl,
                        unordered-containers,
