@@ -20,8 +20,9 @@ strictDeref
   -> m $ Fix $ WithHash :+ NamedTreeLayer
 strictDeref store = cata alg . lazyDeref store
   where
-    alg :: Algebra (WithHash :+ m :+ NamedTreeLayer)
-                   (m $ Fix (WithHash :+ NamedTreeLayer))
+    alg :: Traversable f
+        => Algebra (WithHash :+ m :+ f)
+                   (m $ Fix (WithHash :+ f))
     alg (C (p, C e)) = e >>= traverse id >>= pure . Fix . C . (p,)
 
 
