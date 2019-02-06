@@ -8,6 +8,7 @@ import           Store
 --------------------------------------------
 import           Util.MyCompose
 --------------------------------------------
+import Control.Monad.Free (Free(..))
 
 
 -- | Greedily deref a merkle tree
@@ -17,7 +18,7 @@ strictDeref
    . Monad m
   => Store m
   -> Pointer
-  -> m $ Fix $ WithHash :+ NamedTreeLayer
+  -> m $ Fix $ WithHash :+ Named :+ Tree
 strictDeref store = cata alg . lazyDeref store
   where
     alg :: Traversable f
@@ -34,16 +35,16 @@ lazyDeref
    . Monad m
   => Store m
   -> Pointer
-  -> Fix $ WithHash :+ m :+ NamedTreeLayer
+  -> Fix $ WithHash :+ m :+ Named :+ Tree
 lazyDeref store = futu alg
   where
-    alg :: CVCoAlgebra (WithHash :+ m :+ NamedTreeLayer)
+    alg :: CVCoAlgebra (WithHash :+ m :+ Named :+ Tree)
                        (Pointer)
     alg p = C (p, C $ handleCMTL <$> sDeref store p)
 
     handleCMTL (C (name, e))
       = C . (name,) $ fmap (handleMTL) e
 
-    handleMTL (Fix (C (p, C (Just e)))) = Manual $ C (p, C . pure $ handleCMTL e)
-    handleMTL (Fix (C (p, C Nothing))) = Automatic p
+    handleMTL (Fix (C (p, C (Just e)))) = Free $ C (p, C . pure $ handleCMTL e)
+    handleMTL (Fix (C (p, C Nothing))) = Pure p
 
