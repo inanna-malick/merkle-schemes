@@ -50,7 +50,7 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
       let s (a,b) = (cata s' a, cata s' b)
           -- todo pretty printer here
           s' (C (p, C Nothing)) = show (unPointer p) ++ ":unexpanded"
-          s' (C (p, C (Just (C (Named n t))))) = show (unPointer p) ++ ":(" ++ n ++"):" ++ show t
+          s' (C (p, C (Just (C (n, t))))) = show (unPointer p) ++ ":(" ++ n ++"):" ++ show t
       liftIO $ putStrLn "comparing before to after1"
       compareMerkleTrees store before after1 >>= liftIO . print . fmap s
 

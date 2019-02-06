@@ -4,19 +4,19 @@
 module Compare (compareMerkleTrees) where
 
 --------------------------------------------
-import           Control.Monad.Except
+import           Control.Monad (join)
 import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.Set as Set
 --------------------------------------------
-import           Deref
+import           Deref (lazyDeref)
 import           Diff.Types
-import           Util.These
+import           Util.These (These(..), mapCompare)
 import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
-import           Merkle.Types
-import           Store
+import           Merkle.Types (Pointer)
+import           Store (Store)
 --------------------------------------------
 
 -- | Diff two merkle trees, producing diffs and a record of expansions/derefs performed
@@ -76,7 +76,7 @@ compareMerkleTrees' t1 t2
              , Pointer -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
              )
            )
-    compareDerefed ne1@(C (Named name1 entity1)) ne2@(C (Named name2 entity2))
+    compareDerefed ne1@(C (name1, entity1)) ne2@(C (name2, entity2))
       | name1 /= name2 = do
           -- expansion for the case in which neither node is derefed or explored
           let shallowExpansion = (expandedShallow ne1, expandedShallow ne2)
@@ -93,7 +93,7 @@ compareMerkleTrees' t1 t2
             (Leaf fc1, Leaf fc2)
               | fc1 /= fc2   -> pure ([LeafModified (name1, fc1, fc2)], shallowExpansion)
               -- ASSERTION we can only get here if there's a hash diff, but
-              --            if we have a hash diff then the file contents should differ!?!?
+              --            if we have a hash diff then the file contents should differ.
               -- NOTE: this indicates a situation where two hashes are /= but the hash-addressed
               --       file contents they describe are ==. fail silently (TODO: note error?)
               -- NOTE: making this function pure in 'm' is pretty nice, logging this error
@@ -102,6 +102,11 @@ compareMerkleTrees' t1 t2
               | otherwise    -> pure ([], (unexpanded, unexpanded))
             (Node _, Leaf _) -> pure ([DirReplacedWithFile name1], shallowExpansion)
             (Leaf _, Node _) -> pure ([FileReplacedWithDir name1], shallowExpansion)
+            -- most of the complexity of this function is here - this
+            -- is where the children of two nodes being diffed are compared.
+            -- this requires derefing all nodes for which there is a hash
+            -- mismatch and using the names of the resulting named entities to
+            -- compare nodes with the same names
             (Node ns1, Node ns2) -> do
               let ns1Pointers = Set.fromList $ fmap pointer ns1
                   ns2Pointers = Set.fromList $ fmap pointer ns2
@@ -118,24 +123,24 @@ compareMerkleTrees' t1 t2
               derefedNs1 <- traverse (\x -> fmap C . fmap (pointer x,) $ derefLayer x) exploredNs1
               derefedNs2 <- traverse (\x -> fmap C . fmap (pointer x,) $ derefLayer x) exploredNs2
 
-              -- MAIN PROBLEM: layer + term type is fucking ungainly, ugly
               let mkByNameMap :: [WithHash :+ NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer]
                               -> HashMap Name $ WithHash :+ NamedTreeLayer
                                               $ Fix $ WithHash :+ m :+ NamedTreeLayer
-                  mkByNameMap ns = Map.fromList $ fmap (\e@(C (_, C (Named n _))) -> (n, e)) ns
-                  resolveMapDiff t = case t of -- todo lambdacase
-                    This (n,_) -> pure ( [EntityDeleted n]
+                  mkByNameMap ns = Map.fromList $ fmap (\e@(C (_, C (n, _))) -> (n, e)) ns
+                  resolveMapDiff
+                    (This (n,_)) = pure ( [EntityDeleted n]
                                        , Nothing
                                        )
 
-                    These (_, C (p1,a)) (_, C (p2,b)) -> do
+                  resolveMapDiff
+                    (These (_, C (p1,a)) (_, C (p2,b))) = do
                       (diffs, (de1,de2)) <- compareDerefed a b
                       pure (diffs, Just (de1 p1, de2 p2))
 
-                    That (n,_) -> pure ( [EntityCreated n]
-                                       , Nothing
-                                       )
-
+                  resolveMapDiff
+                    (That (n,_)) = pure ( [EntityCreated n]
+                                      , Nothing
+                                      )
 
               recurseRes <-
                 traverse resolveMapDiff $ mapCompare (mkByNameMap derefedNs1) (mkByNameMap derefedNs2)
@@ -145,11 +150,13 @@ compareMerkleTrees' t1 t2
                   rExpansions1 = recurseRes >>= (maybe [] (pure . fst) . snd)
                   rExpansions2 = recurseRes >>= (maybe [] (pure . snd) . snd)
 
-                  expand name nodes = expanded $ C $ Named name $ Node nodes
+                  expand name nodes = expanded $ C (name, Node nodes)
                   expansions1 = expand name1 $ unexploredNs1 ++ rExpansions1
                   expansions2 = expand name2 $ unexploredNs2 ++ rExpansions2
 
               pure (diffs, (expansions1, expansions2))
+
+
 
 unexpanded
   :: Pointer
