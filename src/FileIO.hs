@@ -1,6 +1,6 @@
 -- | Functions for interacting with the filesystem to
 -- create dir trees from merkle trees or vice versa
-module FileIO (readTree, writeTree) where
+module FileIO (readTree, writeTree, writeTree') where
 
 --------------------------------------------
 import           Control.Monad.Except
@@ -12,6 +12,33 @@ import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
 --------------------------------------------
+import qualified Data.Functor.Foldable as FUK
+
+
+-- | Write tree to file path (using strict tree)
+writeTree'
+  :: MonadIO m
+  => FilePath
+  -> FUK.Fix NamedTreeLayer
+  -> m ()
+writeTree' outdir tree = do
+  liftIO $ evalStateT (FUK.cata alg tree) [outdir]
+
+  where
+    alg :: Algebra NamedTreeLayer (StateT [FilePath] IO ())
+    alg (C (name, (Leaf body)))     = do
+      path <- List.intercalate "/" . reverse . (name:) <$> get
+      liftIO $ writeFile path body
+    alg (C (name, (Node children))) = do
+      path <- List.intercalate "/" . reverse . (name:) <$> get
+      liftIO $ Dir.createDirectory path
+      modify (push name)
+      _ <- traverse id children
+      modify pop
+
+    push x xs = x:xs
+    pop (_:xs)  = xs
+    pop []    = []
 
 
 -- | Write tree to file path (using strict tree)
@@ -21,7 +48,7 @@ writeTree
   -> Fix NamedTreeLayer
   -> m ()
 writeTree outdir tree = do
-  liftIO $ evalStateT (cata alg tree) [outdir]
+  liftIO $ evalStateT (FUK.cata alg tree) [outdir]
 
   where
     alg :: Algebra NamedTreeLayer (StateT [FilePath] IO ())

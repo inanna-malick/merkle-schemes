@@ -5,8 +5,8 @@ import           Data.Aeson
 import qualified Data.Hashable as Hash
 import           GHC.Generics (Generic)
 --------------------------------------------
--- import           Util.RecursionSchemes (Fix(..))
--- import           Util.MyCompose
+import           Util.RecursionSchemes (Fix(..))
+import           Util.MyCompose
 --------------------------------------------
 
 type Hash = Int
@@ -24,3 +24,8 @@ instance ToJSON Pointer where
     -- this generates a Value
     toJSON (Pointer p) =
         toJSON p
+
+type WithHash = (,) Pointer
+
+pointer :: forall f . Fix $ WithHash :+ f -> Pointer
+pointer = fst . getCompose . unFix
