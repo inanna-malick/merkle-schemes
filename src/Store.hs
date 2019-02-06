@@ -24,10 +24,10 @@ data Store m
   { -- | given a pointer, fetch the corresponding entity. Provides type-level guarantee that
     --   at least one level of structure is fetched 'NamedTreeLayer' while allowing for multiple
     --   levels of structure to be returned in one call via 'MerkleTree' subnode type
-    deref :: Pointer -> m $ NamedTreeLayer MerkleTree
+    sDeref :: Pointer -> m $ NamedTreeLayer MerkleTree
     -- | given a shallow layer of structure with subnodes identified by a pointer, store it.
     -- this allows for each store to use its own hash algorithm - not sure if I like that
-  , uploadShallow :: NamedTreeLayer Pointer -> m Pointer
+  , sUploadShallow :: NamedTreeLayer Pointer -> m Pointer
   }
 
 -- todo this should really be bracket pattern for cleanup
@@ -51,7 +51,7 @@ tmpFsStore = do
 fsStore :: FilePath -> Store $ ExceptT MerkleTreeLookupError IO
 fsStore root
   = Store
-  { deref = \p -> do
+  { sDeref = \p -> do
       liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via fs state store"
       contents <- liftIO $ B.readFile (root ++ "/" ++ f p)
       -- liftIO . putStrLn $ "returning deref res via fs state store: " ++ show contents
@@ -59,7 +59,7 @@ fsStore root
         Nothing -> throwError $ EntityNotFoundInStore p
         Just x  -> do
           pure $ makeConcrete $ unSMTL x
-  , uploadShallow = \smtl -> do
+  , sUploadShallow = \smtl -> do
       let p = Pointer $ Hash.hash $ SMTL smtl
       liftIO $ B.writeFile (root ++ "/" ++ f p) (AE.encode $ SMTL smtl)
       pure p
@@ -75,7 +75,7 @@ iorefStore :: IORef $ HashMap Pointer $ NamedTreeLayer Pointer
            -> Store $ ExceptT MerkleTreeLookupError IO
 iorefStore ioref
   = Store
-  { deref = \p -> do
+  { sDeref = \p -> do
       store <- liftIO $ readIORef ioref
       liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via global state store"
       case Map.lookup p store of
@@ -83,8 +83,8 @@ iorefStore ioref
         Just x  -> do
           -- putStrLn $ "returning deref res: " ++ showT x
           pure $ makeConcrete x
-  , uploadShallow = \smtl -> do
-      let pointer = Pointer $ Hash.hash $ SMTL smtl
-      liftIO $ modifyIORef' ioref (Map.insert pointer smtl)
-      pure pointer
+  , sUploadShallow = \smtl -> do
+      let p = Pointer $ Hash.hash $ SMTL smtl
+      liftIO $ modifyIORef' ioref (Map.insert p smtl)
+      pure p
   }

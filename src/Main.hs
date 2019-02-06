@@ -38,7 +38,7 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
     let store = fsStore storeDir
 
     -- forget structure of merkle trees and retain only a pointer to the top level
-    let forgetStructure = mtPointer
+    let forgetStructure = pointer
 
     -- read some merkle trees into memory (and into the store) and then forget all but the top pointer
     before <- mapErrUtil show $ forgetStructure <$> buildDirTree store "examples/before/node1"
@@ -50,7 +50,7 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
       let s (a,b) = (cata s' a, cata s' b)
           -- todo pretty printer here
           s' (C (p, C Nothing)) = show (unPointer p) ++ ":unexpanded"
-          s' (C (p, C (Just (C (NamedEntity n t))))) = show (unPointer p) ++ ":(" ++ n ++"):" ++ show t
+          s' (C (p, C (Just (C (Named n t))))) = show (unPointer p) ++ ":(" ++ n ++"):" ++ show t
       liftIO $ putStrLn "comparing before to after1"
       compareMerkleTrees store before after1 >>= liftIO . print . fmap s
 

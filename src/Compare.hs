@@ -57,14 +57,14 @@ compareMerkleTrees'
          )
        )
 compareMerkleTrees' t1 t2
-  | haesfPointer t1 == haesfPointer t2
+  | pointer t1 == pointer t2
       -- no diff, no need to explore further here
-      = pure ([], (unexpanded $ haesfPointer t1, unexpanded $ haesfPointer t2))
+      = pure ([], (unexpanded $ pointer t1, unexpanded $ pointer t2))
   | otherwise
-      = do deref1 <- haesfDeref t1
-           deref2 <- haesfDeref t2
+      = do deref1 <- derefLayer t1
+           deref2 <- derefLayer t2
            (diffres, (de1, de2)) <- compareDerefed deref1 deref2
-           pure (diffres, (de1 $ haesfPointer t1, de2 $ haesfPointer t2))
+           pure (diffres, (de1 $ pointer t1, de2 $ pointer t2))
 
   where
     compareDerefed
@@ -76,12 +76,12 @@ compareMerkleTrees' t1 t2
              , Pointer -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
              )
            )
-    compareDerefed ne1@(C (NamedEntity name1 entity1)) ne2@(C (NamedEntity name2 entity2))
+    compareDerefed ne1@(C (Named name1 entity1)) ne2@(C (Named name2 entity2))
       | name1 /= name2 = do
           -- expansion for the case in which neither node is derefed or explored
           let shallowExpansion = (expandedShallow ne1, expandedShallow ne2)
           -- flatten out sub-entities to only contain pointers then check equality
-          if (fmap haesfPointer entity1 == fmap haesfPointer entity2)
+          if (fmap pointer entity1 == fmap pointer entity2)
             then
               pure ([EntityRenamed name1 name2], shallowExpansion)
             else
@@ -103,26 +103,26 @@ compareMerkleTrees' t1 t2
             (Node _, Leaf _) -> pure ([DirReplacedWithFile name1], shallowExpansion)
             (Leaf _, Node _) -> pure ([FileReplacedWithDir name1], shallowExpansion)
             (Node ns1, Node ns2) -> do
-              let ns1Pointers = Set.fromList $ fmap haesfPointer ns1
-                  ns2Pointers = Set.fromList $ fmap haesfPointer ns2
+              let ns1Pointers = Set.fromList $ fmap pointer ns1
+                  ns2Pointers = Set.fromList $ fmap pointer ns2
 
               -- DECISION: order of node children doesn't matter, so drop down to Set here
-              let exploredNs1 = filter (not . flip Set.member (ns2Pointers) . haesfPointer) ns1
-                  exploredNs2 = filter (not . flip Set.member (ns1Pointers) . haesfPointer) ns2
+              let exploredNs1 = filter (not . flip Set.member (ns2Pointers) . pointer) ns1
+                  exploredNs2 = filter (not . flip Set.member (ns1Pointers) . pointer) ns2
                   -- for construting 'unexpanded' branches
                   unexploredNs1 :: [Fix $ WithHash :+ Maybe :+ NamedTreeLayer]
-                  unexploredNs1  = fmap (unexpanded . haesfPointer) $ filter (flip Set.member (ns2Pointers) . haesfPointer) ns1
+                  unexploredNs1  = fmap (unexpanded . pointer) $ filter (flip Set.member (ns2Pointers) . pointer) ns1
                   unexploredNs2 :: [Fix $ WithHash :+ Maybe :+ NamedTreeLayer]
-                  unexploredNs2  = fmap (unexpanded . haesfPointer) $ filter (flip Set.member (ns1Pointers) . haesfPointer) ns2
+                  unexploredNs2  = fmap (unexpanded . pointer) $ filter (flip Set.member (ns1Pointers) . pointer) ns2
 
-              derefedNs1 <- traverse (\x -> fmap C . fmap (haesfPointer x,) $ haesfDeref x) exploredNs1
-              derefedNs2 <- traverse (\x -> fmap C . fmap (haesfPointer x,) $ haesfDeref x) exploredNs2
+              derefedNs1 <- traverse (\x -> fmap C . fmap (pointer x,) $ derefLayer x) exploredNs1
+              derefedNs2 <- traverse (\x -> fmap C . fmap (pointer x,) $ derefLayer x) exploredNs2
 
               -- MAIN PROBLEM: layer + term type is fucking ungainly, ugly
               let mkByNameMap :: [WithHash :+ NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer]
                               -> HashMap Name $ WithHash :+ NamedTreeLayer
                                               $ Fix $ WithHash :+ m :+ NamedTreeLayer
-                  mkByNameMap ns = Map.fromList $ fmap (\e@(C (_, C (NamedEntity n _))) -> (n, e)) ns
+                  mkByNameMap ns = Map.fromList $ fmap (\e@(C (_, C (Named n _))) -> (n, e)) ns
                   resolveMapDiff t = case t of -- todo lambdacase
                     This (n,_) -> pure ( [EntityDeleted n]
                                        , Nothing
@@ -145,14 +145,11 @@ compareMerkleTrees' t1 t2
                   rExpansions1 = recurseRes >>= (maybe [] (pure . fst) . snd)
                   rExpansions2 = recurseRes >>= (maybe [] (pure . snd) . snd)
 
-                  expand name nodes = expanded $ C $ NamedEntity name $ Node nodes
+                  expand name nodes = expanded $ C $ Named name $ Node nodes
                   expansions1 = expand name1 $ unexploredNs1 ++ rExpansions1
                   expansions2 = expand name2 $ unexploredNs2 ++ rExpansions2
 
               pure (diffs, (expansions1, expansions2))
-
-
-
 
 unexpanded
   :: Pointer
@@ -172,3 +169,8 @@ expandedShallow
   -> Pointer
   -> Fix $ WithHash :+ Maybe :+ NamedTreeLayer
 expandedShallow x = expanded (fmap (\(Fix (C (p,_))) -> Fix $ C (p, C Nothing)) x)
+
+
+derefLayer :: Fix $ WithHash :+ m :+ NamedTreeLayer
+           -> m $ NamedTreeLayer $ Fix $ WithHash :+ m :+ NamedTreeLayer
+derefLayer   = getCompose . snd . getCompose . unFix
