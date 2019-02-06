@@ -1,6 +1,6 @@
 -- | Functions for interacting with the filesystem to
 -- create dir trees from merkle trees or vice versa
-module FileIO (buildDirTree, outputDirTree) where
+module FileIO (readTree, writeTree) where
 
 --------------------------------------------
 import           Control.Monad.Except
@@ -8,31 +8,27 @@ import           Control.Monad.Trans.State.Lazy
 import qualified Data.List as List
 import qualified System.Directory as Dir
 --------------------------------------------
-import           Deref
 import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
-import           Merkle.Types (Pointer)
-import           Store
 --------------------------------------------
 
--- | Write tree to file path
-outputDirTree
+
+-- | Write tree to file path (using strict tree)
+writeTree
   :: MonadIO m
-  => Store m
-  -> FilePath
-  -> Pointer
+  => FilePath
+  -> Fix NamedTreeLayer
   -> m ()
-outputDirTree store outdir p = do
-  derefed <- strictDeref store p
-  liftIO $ evalStateT (cata alg derefed) [outdir]
+writeTree outdir tree = do
+  liftIO $ evalStateT (cata alg tree) [outdir]
 
   where
-    alg :: Algebra (WithHash :+ NamedTreeLayer) (StateT [FilePath] IO ())
-    alg (C (_p, (C (name, (Leaf body)))))     = do
+    alg :: Algebra NamedTreeLayer (StateT [FilePath] IO ())
+    alg (C (name, (Leaf body)))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
-    alg (C (_p, (C (name, (Node children))))) = do
+    alg (C (name, (Node children))) = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ Dir.createDirectory path
       modify (push name)
@@ -43,40 +39,8 @@ outputDirTree store outdir p = do
     pop (_:xs)  = xs
     pop []    = []
 
-
--- | actual dir recursive traversal
--- ignores permissions in diffs (all file permissions are, idk, that of running process?)
--- and coerces file contents into unicode #YOLO. Reads directory structure into memory
--- and annotates nodes with their hashes
-buildDirTree
-  :: MonadIO m
-  => Store m
-  -> FilePath
-  -> m MerkleTree
-buildDirTree store = addDirTreeToStore store . buildDirTree'
-
--- | annotate tree nodes with hash, adding them to some global store during this traversal
--- NOTE: fully consumes potentially-infinite effectful stream and may not terminate
-addDirTreeToStore
-  :: forall m
-   . Monad m
-  => Store m
-  -> Fix $ m :+ NamedTreeLayer
-  -> m MerkleTree
-addDirTreeToStore store = cata alg
-  where
-    alg :: Algebra (m :+ NamedTreeLayer) (m MerkleTree)
-    alg (C getEntity) = do
-      (C (name, entity')) <- getEntity
-      entity <- (name,) <$> case entity' of
-        Leaf body -> pure $ Leaf body
-        Node children -> do
-          children' <- traverse id children
-          pure $ Node children'
-      p <- sUploadShallow store $ makeShallow $ C entity
-      pure . Fix . C . (p,) . C . Just $ C entity
-
-buildDirTree'
+-- | Lazily read some directory tree into memory
+readTree
   :: forall m
    . MonadIO m
   => FilePath
@@ -84,7 +48,7 @@ buildDirTree'
   -- type-level guarantee that there is no hash identified
   -- entity indirection allowed here
   -> Fix (m :+ NamedTreeLayer)
-buildDirTree' = ana alg
+readTree = ana alg
   where
     alg :: CoAlgebra (m :+ NamedTreeLayer) FilePath
     alg path = C $ do

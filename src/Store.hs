@@ -1,4 +1,4 @@
-module Store (Store(..), tmpFsStore, fsStore, createTmpDir, iorefStore) where
+module Store where
 
 --------------------------------------------
 import qualified Data.Aeson as AE
@@ -15,6 +15,7 @@ import           Errors
 import           Merkle.Types
 import           Merkle.Tree.Types
 import           Util.MyCompose
+import           Util.RecursionSchemes
 --------------------------------------------
 
 
@@ -24,7 +25,7 @@ data Store m
   { -- | given a pointer, fetch the corresponding entity. Provides type-level guarantee that
     --   at least one level of structure is fetched 'NamedTreeLayer' while allowing for multiple
     --   levels of structure to be returned in one call via 'MerkleTree' subnode type
-    sDeref :: Pointer -> m $ NamedTreeLayer MerkleTree
+    sDeref :: Pointer -> m $ NamedTreeLayer LazyMerkleTree
     -- | given a shallow layer of structure with subnodes identified by a pointer, store it.
     -- this allows for each store to use its own hash algorithm - not sure if I like that
   , sUploadShallow :: NamedTreeLayer Pointer -> m Pointer
@@ -70,6 +71,10 @@ fsStore root
     f p = "pointer_" ++ show (unPointer p)
 
 
+
+-- todo own file
+type GlobalStore = IORef (HashMap Pointer (Named :+ Tree $ LazyMerkleTree))
+
 -- | Store backed by in-memory IORef HashMap
 iorefStore :: IORef $ HashMap Pointer $ NamedTreeLayer Pointer
            -> Store $ ExceptT MerkleTreeLookupError IO
@@ -88,3 +93,24 @@ iorefStore ioref
       liftIO $ modifyIORef' ioref (Map.insert p smtl)
       pure p
   }
+
+-- | consume effectful tree, annotate nodes with hash,
+--   adds them to some global store during this traversal
+-- NOTE: fully consumes potentially-infinite effectful stream and may not terminate
+addTreeToStore
+  :: forall m
+   . Monad m
+  => Store m
+  -> Fix NamedTreeLayer
+  -> m $ Fix $ WithHash :+ NamedTreeLayer
+addTreeToStore store = cata alg
+  where
+    alg :: Algebra NamedTreeLayer (m $ Fix $ WithHash :+ NamedTreeLayer)
+    alg (C (name, entity')) = do
+      entity <- (name,) <$> case entity' of
+        Leaf body -> pure $ Leaf body
+        Node children -> do
+          children' <- traverse id children
+          pure $ Node children'
+      p <- sUploadShallow store . fmap pointer $ C entity
+      pure . Fix . C . (p,) $ C entity
