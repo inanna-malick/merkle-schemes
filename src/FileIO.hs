@@ -12,7 +12,7 @@ import           Deref
 import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
-import           Merkle.Types (Pointer, HashIdentifiedEntity(..))
+import           Merkle.Types (Pointer)
 import           Store
 --------------------------------------------
 
@@ -23,16 +23,16 @@ outputDirTree
   -> FilePath
   -> Pointer
   -> m ()
-outputDirTree store outdir pointer = do
-  derefed <- strictDeref store pointer
+outputDirTree store outdir p = do
+  derefed <- strictDeref store p
   liftIO $ evalStateT (cata alg derefed) [outdir]
 
   where
     alg :: Algebra (WithHash :+ NamedTreeLayer) (StateT [FilePath] IO ())
-    alg (C (_p, (C (NamedEntity name (Leaf body)))))     = do
+    alg (C (_p, (C (Named name (Leaf body)))))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
-    alg (C (_p, (C (NamedEntity name (Node children))))) = do
+    alg (C (_p, (C (Named name (Node children))))) = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ Dir.createDirectory path
       modify (push name)
@@ -67,14 +67,14 @@ addDirTreeToStore store = cata alg
   where
     alg :: Algebra (m :+ NamedTreeLayer) (m MerkleTree)
     alg (C getEntity) = do
-      (C (NamedEntity name entity')) <- getEntity
-      entity <- NamedEntity name <$> case entity' of
+      (C (Named name entity')) <- getEntity
+      entity <- Named name <$> case entity' of
         Leaf body -> pure $ Leaf body
         Node children -> do
           children' <- traverse id children
           pure $ Node children'
-      pointer <- uploadShallow store $ makeShallow $ C entity
-      pure . Fix . C . Direct pointer $ C entity
+      p <- sUploadShallow store $ makeShallow $ C entity
+      pure . Fix . C . (p,) . C . Just $ C entity
 
 buildDirTree'
   :: forall m
@@ -93,12 +93,12 @@ buildDirTree' = ana alg
       if isFile
         then do
           fc <- liftIO $ readFile path
-          pure . C . NamedEntity (justTheName path) $ Leaf fc
+          pure . C . Named (justTheName path) $ Leaf fc
         else do
           isDir <- liftIO $ Dir.doesDirectoryExist path
           if isDir
             then fmap ( C
-                      . NamedEntity (justTheName path)
+                      . Named (justTheName path)
                       . Node
                       . fmap (\x -> path ++ "/" ++ x)
                       . filter (/= ".")
