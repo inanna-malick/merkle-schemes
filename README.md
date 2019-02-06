@@ -32,3 +32,5 @@ TODO
 -- this allows for server-side logging to substantiate claims re: not using 
 -- command interface such that I can add things to store, get (print) them, get (to filesystem) them..
 -- NOTE: can just not do this if I don't want to, can just do filestore lookups via hash addressed fs store
+
+-- TODO: add an extra layer of hash indirection for leaf node bodies - allow for diffing of some dir to detect file name changes without pulling full file body from store

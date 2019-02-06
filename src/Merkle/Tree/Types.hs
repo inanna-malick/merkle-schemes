@@ -18,12 +18,7 @@ type Name = String
 data Tree a = Node [a] | Leaf String deriving (Eq, Show, Functor, Foldable, Traversable)
 
 -- | Named entity
-data Named a
-  = Named
-  { neName   :: Name
-  , neEntity :: a
-  } deriving (Eq, Show, Functor, Foldable, Traversable)
-
+type Named = (,) Name
 
 -- | TODO DOX
 type NamedTreeLayer = Named :+ Tree
@@ -38,16 +33,16 @@ type MerkleTree = Fix (WithHash :+ Maybe :+ NamedTreeLayer)
 newtype ShallowMerkleTreeLayer = SMTL { unSMTL :: (Named :+ Tree) Pointer}
 
 instance Hash.Hashable ShallowMerkleTreeLayer where
-  hashWithSalt s (SMTL (C (Named n (Leaf contents))))
+  hashWithSalt s (SMTL (C (n, (Leaf contents))))
     = s `Hash.hashWithSalt` Hash.hash n `Hash.hashWithSalt` Hash.hash contents
-  hashWithSalt s (SMTL (C (Named n (Node contents))))
+  hashWithSalt s (SMTL (C (n, (Node contents))))
     = s `Hash.hashWithSalt` Hash.hash n `Hash.hashWithSalt` Hash.hash contents
 
 instance ToJSON ShallowMerkleTreeLayer where
     -- this generates a Value
-    toJSON (SMTL (C (Named name (Leaf body)))) =
+    toJSON (SMTL (C (name, (Leaf body)))) =
         object ["type" .= ("leaf" :: Text), "name" .= pack name, "body" .= pack body]
-    toJSON (SMTL (C (Named name (Node pointers)))) =
+    toJSON (SMTL (C (name, (Node pointers)))) =
         object ["type" .= ("node" :: Text), "name" .= pack name, "children" .= toJSON pointers]
 
 instance FromJSON ShallowMerkleTreeLayer where
@@ -57,10 +52,10 @@ instance FromJSON ShallowMerkleTreeLayer where
         case typ of
           "node" -> do
               children <- v .: "children"
-              pure . SMTL . C $ Named name $ Node children
+              pure . SMTL $ C (name, Node children)
           "leaf" -> do
               body <- v .: "body"
-              pure . SMTL . C $ Named name $ Leaf body
+              pure . SMTL $ C (name, Leaf body)
           x -> fail $ "unsupported node type " ++ x
 
 

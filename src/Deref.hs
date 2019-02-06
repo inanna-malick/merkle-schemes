@@ -40,8 +40,8 @@ lazyDeref store = futu alg
                        (Pointer)
     alg p = C (p, C $ handleCMTL <$> sDeref store p)
 
-    handleCMTL (C (Named name e))
-      = C . Named name $ fmap (handleMTL) e
+    handleCMTL (C (name, e))
+      = C . (name,) $ fmap (handleMTL) e
 
     handleMTL (Fix (C (p, C (Just e)))) = Manual $ C (p, C . pure $ handleCMTL e)
     handleMTL (Fix (C (p, C Nothing))) = Automatic p

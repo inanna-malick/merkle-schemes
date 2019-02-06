@@ -29,10 +29,10 @@ outputDirTree store outdir p = do
 
   where
     alg :: Algebra (WithHash :+ NamedTreeLayer) (StateT [FilePath] IO ())
-    alg (C (_p, (C (Named name (Leaf body)))))     = do
+    alg (C (_p, (C (name, (Leaf body)))))     = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ writeFile path body
-    alg (C (_p, (C (Named name (Node children))))) = do
+    alg (C (_p, (C (name, (Node children))))) = do
       path <- List.intercalate "/" . reverse . (name:) <$> get
       liftIO $ Dir.createDirectory path
       modify (push name)
@@ -67,8 +67,8 @@ addDirTreeToStore store = cata alg
   where
     alg :: Algebra (m :+ NamedTreeLayer) (m MerkleTree)
     alg (C getEntity) = do
-      (C (Named name entity')) <- getEntity
-      entity <- Named name <$> case entity' of
+      (C (name, entity')) <- getEntity
+      entity <- (name,) <$> case entity' of
         Leaf body -> pure $ Leaf body
         Node children -> do
           children' <- traverse id children
@@ -93,12 +93,12 @@ buildDirTree' = ana alg
       if isFile
         then do
           fc <- liftIO $ readFile path
-          pure . C . Named (justTheName path) $ Leaf fc
+          pure . C . (justTheName path,) $ Leaf fc
         else do
           isDir <- liftIO $ Dir.doesDirectoryExist path
           if isDir
             then fmap ( C
-                      . Named (justTheName path)
+                      . (justTheName path,)
                       . Node
                       . fmap (\x -> path ++ "/" ++ x)
                       . filter (/= ".")
