@@ -15,7 +15,7 @@ import           Util.These (These(..), mapCompare)
 import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
-import           Store (Store)
+import           Store.Capability (Store)
 --------------------------------------------
 
 -- | Diff two merkle trees, producing diffs and a record of expansions/derefs performed
