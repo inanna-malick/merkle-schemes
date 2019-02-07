@@ -6,12 +6,13 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 --------------------------------------------
 import           Commands
 import           Compare (compareMerkleTrees)
-import           Deref (strictDeref)
+import           Deref
 import           FileIO (writeTree, readTree)
 import           Merkle.Tree.Types
 import           Util.MyCompose
 import           Util.Util (mapErrUtil)
 import           Util.RecursionSchemes
+import           Search
 import           Store.Capability
 import           Store.FileSystem
 --------------------------------------------
@@ -29,6 +30,11 @@ run (MerkleDiffOpts storeDir (Get p mfp)) = do
   fp <- maybe (createTmpDir "merkle_get") pure mfp
   _res <- runExceptT $ strictlyDerefAndWrite store fp p
   putStrLn "done getting!"
+  --print res
+run (MerkleDiffOpts storeDir (Find p query)) = do
+  let store = fsStore storeDir
+  _ <- undefined p query store
+  putStrLn "done putting!"
   --print res
 run (MerkleDiffOpts storeDir (Put fp)) = do
   let store = fsStore storeDir
@@ -62,9 +68,27 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
       liftIO $ putStrLn "comparing before to after3"
       compareMerkleTrees store before after3 >>= liftIO . print . fmap s
 
+
+    liftIO $ putStrLn "streaming search"
+    mapErrUtil show $ derefAndSearch store "ba"  after1
+    liftIO $ putStrLn "end streaming search"
+
     mapErrUtil show $ liftIO (createTmpDir "output-example") >>= flip (strictlyDerefAndWrite store) after3
 
   print res'
+
+-- | Write tree to file path (using pointer)
+derefAndSearch
+  :: MonadIO m
+  => Store m
+  -> String
+  -> Pointer
+  -> m ()
+derefAndSearch store query p = consume (liftIO . putStrLn) lazySearch
+  where
+    lazyDerefed = cata (Fix . snd . getCompose) -- strip hash annotations
+                $ lazyDeref store p
+    lazySearch  = search query lazyDerefed
 
 -- | Write tree to file path (using pointer)
 strictlyDerefAndWrite

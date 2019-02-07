@@ -23,11 +23,11 @@ data MerkleDiffOpts
 
 -- todo records for each?
 data Command
-  = Put  FilePath -- -> Pointer
+  = Put  FilePath -- Pointer
   | Get  Pointer (Maybe FilePath) -- write to temp file if Nothing
   | Diff Pointer Pointer
   | Demo -- run old main
-  -- | Find Pointer String -- todo: find first and terminate? or keep going?
+  | Find Pointer String -- todo: find first and terminate? or keep going?
 
 
 fileOpt :: String -> Char -> String -> String -> Parser FilePath
@@ -59,15 +59,16 @@ parser
        storeDir
       <*>
        subparser
-       ( command "put" (info putOptions ( progDesc "read a dir tree from the fs and upload it to the repo" ))
-      <> command "get" (info getOptions ( progDesc "read a tree from the repo and write it to the fs" ))
-      <> command "diff" (info diffOptions ( progDesc "diff two merkle trees" ))
-      <> command "demo" (info (pure Demo) ( progDesc "run random demo thingy" ))
-       --  <> command "find" (info commitOptions ( progDesc "lazily search a merkle tree" ))
+       ( command "put"  (info putOptions  ( progDesc "read a dir tree from the fs and upload it to the repo" ))
+      <> command "get"  (info getOptions  ( progDesc "read a tree from the repo and write it to the fs" ))
+      <> command "diff" (info diffOptions  ( progDesc "diff two merkle trees" ))
+      <> command "demo" (info (pure Demo)  ( progDesc "run random demo thingy" ))
+      <> command "find" (info findOptions  ( progDesc "lazily search a merkle tree" ))
        )
   where
-    putOptions = Put <$> fileInput
-    getOptions = Get <$> pointerInput "P" 'p' "pointer" <*> optional fileOutput
+    putOptions  = Put  <$> fileInput
+    getOptions  = Get  <$> pointerInput "P" 'p' "pointer" <*> optional fileOutput
+    findOptions = Find <$> pointerInput "P" 'p' "pointer" <*> fileInput
     diffOptions = Diff
               <$> pointerInput "BEFORE" 'b' "before"
               <*> pointerInput "AFTER"  'a'  "after"

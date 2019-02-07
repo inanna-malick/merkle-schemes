@@ -1,13 +1,12 @@
 module Deref where
 
 --------------------------------------------
+import           Control.Monad.Free (Free(..))
+import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
 import           Store.Capability
 --------------------------------------------
-import           Util.MyCompose
---------------------------------------------
-import Control.Monad.Free (Free(..))
 
 
 -- | Greedily deref a merkle tree

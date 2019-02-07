@@ -39,8 +39,15 @@ fsStore root
       pure p
   }
   where
-    -- todo something cooler and more human-readable eg [a..z]
-    f p = "pointer_" ++ show (unPointer p)
+    f (Pointer p) = h p
+
+    -- todo: make this bidirectional so I can use it as an input format
+    chars = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9']
+    base = length chars
+
+    h n | n == 0 = ""
+        | n < 0 = h $ (-1) * n -- increase risk of hash colissions here, but #YOLO
+        | otherwise = chars !! (n `rem` base) : h (n `div` base)
 
 -- todo this should really be bracket pattern for cleanup
 createTmpDir :: String -> IO FilePath
