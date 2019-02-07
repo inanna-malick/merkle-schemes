@@ -12,7 +12,8 @@ import           Merkle.Tree.Types
 import           Util.MyCompose
 import           Util.Util (mapErrUtil)
 import           Util.RecursionSchemes
-import           Store
+import           Store.Capability
+import           Store.FileSystem
 --------------------------------------------
 
 main :: IO ()
