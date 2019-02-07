@@ -15,8 +15,8 @@ type Name = String
 -- | Entity tagged with a name
 type Named = (,) Name
 
-type Hash = Int
 newtype Pointer = Pointer { unPointer :: Int } deriving (Eq, Ord, Show)
+
 -- | Entity tagged with a hash that uniquely identifies it
 type WithHash = (,) Pointer
 
