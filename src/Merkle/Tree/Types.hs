@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module Merkle.Tree.Types where
 
 --------------------------------------------
