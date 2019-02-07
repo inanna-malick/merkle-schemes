@@ -15,7 +15,6 @@ import           Util.These (These(..), mapCompare)
 import           Util.MyCompose
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
-import           Merkle.Types
 import           Store (Store)
 --------------------------------------------
 

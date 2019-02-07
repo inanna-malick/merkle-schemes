@@ -1,7 +1,7 @@
 module Errors (MerkleTreeLookupError(..), FileReadError(..))where
 
 --------------------------------------------
-import           Merkle.Types (Pointer(..))
+import           Merkle.Tree.Types (Pointer(..))
 --------------------------------------------
 
 data MerkleTreeLookupError

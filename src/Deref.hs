@@ -3,7 +3,6 @@ module Deref where
 --------------------------------------------
 import           Util.RecursionSchemes
 import           Merkle.Tree.Types
-import           Merkle.Types
 import           Store
 --------------------------------------------
 import           Util.MyCompose

@@ -5,15 +5,15 @@ import qualified Data.Aeson as AE
 import           Control.Monad.Except
 import qualified Data.ByteString.Lazy as B
 import qualified Data.Hashable as Hash
-import           Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as Map
+import           Data.Map (Map)
+import qualified Data.Map as Map
 import           Data.IORef
 import           System.Directory (getTemporaryDirectory, createDirectory)
 import           System.Random (randomIO)
 --------------------------------------------
 import           Errors
-import           Merkle.Types
 import           Merkle.Tree.Types
+import           Merkle.Tree.Encoding
 import           Util.MyCompose
 import           Util.RecursionSchemes
 --------------------------------------------
@@ -70,13 +70,8 @@ fsStore root
     -- todo something cooler and more human-readable eg [a..z]
     f p = "pointer_" ++ show (unPointer p)
 
-
-
--- todo own file
-type GlobalStore = IORef (HashMap Pointer (Named :+ Tree $ LazyMerkleTree))
-
 -- | Store backed by in-memory IORef HashMap
-iorefStore :: IORef $ HashMap Pointer $ Named :+ Tree $ Pointer
+iorefStore :: IORef $ Map Pointer $ Named :+ Tree $ Pointer
            -> Store $ ExceptT MerkleTreeLookupError IO
 iorefStore ioref
   = Store

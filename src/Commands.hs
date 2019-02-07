@@ -4,7 +4,7 @@ module Commands (MerkleDiffOpts(..), Command(..), parse)where
 import Options.Applicative
 import Data.Semigroup ((<>))
 
-import Merkle.Types
+import Merkle.Tree.Types
 
 
 parse :: IO MerkleDiffOpts
