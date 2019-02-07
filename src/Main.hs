@@ -8,7 +8,6 @@ import           Commands
 import           Compare (compareMerkleTrees)
 import           Deref (strictDeref)
 import           FileIO (writeTree, readTree)
-import           Merkle.Types
 import           Merkle.Tree.Types
 import           Util.MyCompose
 import           Util.Util (mapErrUtil)
