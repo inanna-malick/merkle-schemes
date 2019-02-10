@@ -6,15 +6,16 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 --------------------------------------------
 import           Commands
 import           Compare (compareMerkleTrees)
-import           Deref
 import           FileIO (writeTree, readTree)
+import           Merkle.Types
 import           Merkle.Tree.Types
 import           Util.MyCompose
 import           Util.Util (mapErrUtil)
 import           Util.RecursionSchemes
 import           Search
-import           Store.Capability
-import           Store.FileSystem
+import           Merkle.Store
+import           Merkle.Store.Deref
+import           Merkle.Store.FileSystem
 --------------------------------------------
 
 main :: IO ()
@@ -80,7 +81,7 @@ run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for test
 -- | Write tree to file path (using pointer)
 derefAndSearch
   :: MonadIO m
-  => Store m
+  => Store m (Named :+ Tree)
   -> String
   -> Pointer
   -> m ()
@@ -93,7 +94,7 @@ derefAndSearch store query p = consume (liftIO . putStrLn) lazySearch
 -- | Write tree to file path (using pointer)
 strictlyDerefAndWrite
   :: MonadIO m
-  => Store m
+  => Store m (Named :+ Tree)
   -> FilePath
   -> Pointer
   -> m ()
@@ -105,10 +106,10 @@ strictlyDerefAndWrite store outdir p = do
 -- | Read tree from the file system and upload to a store
 strictlyReadAndUpload
   :: MonadIO m
-  => Store m
+  => Store m (Named :+ Tree)
   -> FilePath
   -> m StrictMerkleTree
 strictlyReadAndUpload store dir = do
   let lazyTree = readTree dir
   strictTree <- cata (\(C effect) -> effect >>= traverse id >>= pure . Fix) lazyTree
-  addTreeToStore store strictTree
+  addToStore store strictTree
