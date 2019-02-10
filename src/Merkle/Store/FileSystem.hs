@@ -1,4 +1,4 @@
-module Store.FileSystem where
+module Merkle.Store.FileSystem where
 
 --------------------------------------------
 import qualified Data.Aeson as AE
@@ -9,20 +9,21 @@ import           System.Directory (getTemporaryDirectory, createDirectory)
 import           System.Random (randomIO)
 --------------------------------------------
 import           Errors
+import           Merkle.Types (Pointer(..), makeConcrete)
 import           Merkle.Tree.Types
 import           Merkle.Tree.Encoding
 import           Util.MyCompose
-import           Store.Capability
+import           Merkle.Store
 --------------------------------------------
 
 -- | Filesystem backed store using a temp dir
-tmpFsStore :: IO $ Store $ ExceptT MerkleTreeLookupError IO
+tmpFsStore :: IO $ Store  (ExceptT MerkleTreeLookupError IO) (Named :+ Tree)
 tmpFsStore = do
   dir <- createTmpDir "merklestore"
   pure $ fsStore dir
 
 -- | Filesystem backed store using the provided dir
-fsStore :: FilePath -> Store $ ExceptT MerkleTreeLookupError IO
+fsStore :: FilePath -> Store (ExceptT MerkleTreeLookupError IO) (Named :+ Tree)
 fsStore root
   = Store
   { sDeref = \p -> do

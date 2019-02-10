@@ -5,6 +5,7 @@ import           Data.Aeson
 import           Data.Hashable (Hashable(..))
 import           Data.Text
 --------------------------------------------
+import           Merkle.Types (Pointer(..))
 import           Merkle.Tree.Types
 import           Util.MyCompose
 --------------------------------------------

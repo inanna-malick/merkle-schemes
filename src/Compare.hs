@@ -9,13 +9,14 @@ import qualified Data.HashMap.Strict as Map
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.Set as Set
 --------------------------------------------
-import           Deref (lazyDeref)
 import           Diff.Types
 import           Util.These (These(..), mapCompare)
 import           Util.MyCompose
 import           Util.RecursionSchemes
+import           Merkle.Types
 import           Merkle.Tree.Types
-import           Store.Capability (Store)
+import           Merkle.Store (Store)
+import           Merkle.Store.Deref (lazyDeref)
 --------------------------------------------
 
 -- | Diff two merkle trees, producing diffs and a record of expansions/derefs performed
@@ -26,7 +27,7 @@ compareMerkleTrees
   -- no knowledge about actual monad stack - just knows it's the same
   -- as used by the store, which lets us create a lazy effectful streaming structure
    . Monad m
-  => Store m
+  => Store m (Named :+ Tree)
   -> Pointer -- top level interface is just pointers!
   -> Pointer -- top level interface is just pointers!
   -> m ( [Diff] -- resulting diffs
