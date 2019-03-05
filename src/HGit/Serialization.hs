@@ -51,8 +51,8 @@ sdecode = \case
           "commit" -> do
               name <- v .: "name"
               root <- v .: "root"
-              prev <- v .: "prev"
-              pure $ Commit name (Const $ HashPointer root) (fmap (Const . HashPointer) prev)
+              parents <- v .: "parents"
+              pure $ Commit name (Const $ HashPointer root) (fmap (Const . HashPointer) parents)
           x -> fail $ "require [commit, nullcommit] type" ++ x
 
   where
@@ -108,11 +108,11 @@ sencode = \case
                , "children" .= fmap mkThingy children
                ]
 
-    Commit name root prev ->
+    Commit name root parents ->
         object [ "type" .= ("commit" :: Text)
                , "name" .= pack name
                , "root" .= (unHashPointer $ getConst root)
-               , "prev" .= fmap (unHashPointer . getConst) prev
+               , "parents" .= fmap (unHashPointer . getConst) parents
                ]
     NullCommit ->
         object [ "type" .= ("nullcommit" :: Text)
@@ -124,8 +124,12 @@ sencode = \case
                               (pure . ("pointer" .=) . unHashPointer . getConst)
 
 
+-- both the empty dir and the null commit use the same pointer,
+-- but that's ok - can distinguish via type tags
 hash :: HGit (Const HashPointer) x -> HashPointer
-hash = mkHashPointer . H.hash . sencode
+hash (Dir [])   = mkHashPointer 0
+hash NullCommit = mkHashPointer 0
+hash x = mkHashPointer . H.hash $ sencode x
 
 
 hash' :: HGit (Const HashPointer) :-> Const HashPointer

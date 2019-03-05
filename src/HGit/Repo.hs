@@ -20,7 +20,7 @@ import           HGit.Store.FileSystem (fsStore)
 
 hgitDir, hgitStateFile, hgitStoreDir :: PartialFilePath
 hgitDir = ".hgit"
-hgitStateFile = "state"
+hgitStateFile = "state.json"
 hgitStoreDir = "store"
 
 -- TODO: dir tree traversal to allow for running app in non-root repo dir? mb
