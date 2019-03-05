@@ -1,115 +1,138 @@
 module Main where
 
 --------------------------------------------
-import           Control.Monad.Except (runExceptT)
-import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Data.Functor.Const
+import qualified Data.Functor.Compose as FC
+import qualified Data.Map as M
+import qualified System.Directory as Dir
 --------------------------------------------
 import           Commands
-import           Compare (compareMerkleTrees)
-import           FileIO (writeTree, readTree)
-import           Merkle.Types
-import           Merkle.Tree.Types
+import           FileIO
+import           HGit.Diff (diffMerkleDirs)
+import           HGit.Repo
+import           HGit.Types
 import           Util.MyCompose
-import           Util.Util (mapErrUtil)
-import           Util.RecursionSchemes
-import           Search
-import           Merkle.Store
-import           Merkle.Store.Deref
-import           Merkle.Store.FileSystem
+import           Util.HRecursionSchemes
+import           HGit.Serialization (emptyDirHash)
+import           HGit.Store
+import           HGit.Store.Deref
 --------------------------------------------
 
+-- TODO: new app plan - minimum required for cool demo, basically - idea is diffing branches, checking them out, etc
+-- checkout: reset current directory to branch - only if no changes (determined by reading current dir and doing diff)
+-- idea: --lazy flag, just touches all files but only grabs those you request
+--       note: this kinda breaks diffing against current directory, BUT I can have my own format:
+--             [filename].hgit.lazy.file OR [dirname].hgit.lazy.dir
+--             could then just disallow this postfix on ingestion to avoid possibility of overlap
+--             anyway, then just have that be read as diff of subtree and include lazyness in file
+--             read... fuck, this is nontrivial. I will do this as part of _V2_ - seriously, nontrivial..
+--             that said, it's a hecking good idea.. w/o it no real need for the search path thing either tbh..
+--             ok, no worries - branch/checkout/etc is PERFECT for demo v1 thingy, next can be w/e lol
+-- idea: that then requires checkout w/ file path (would checkout file and all subdirs and mk same)
+--       could just have optional 'only this path if it exists' string and run off that
+--       type idea: IO $ Either FileDoesntExistError $ IO ()
+--       can then build up actions _but_ only run them (eg intermediate mkdir calls)
+--       if no named file is missing
+--       this allows for tree traversal and not just single file, have input be list of file parts
+--       and use state (as elsewhere) to manage stack - can use * at any level to select all files or dirs and run next thing in list, if * is end of list is treated as Nothing (match all)
+--       note: --lazy and --match can be applied to the same traversal via the same code
+
+
+-- NOTE: might as well just keep popping up the directory tree to find that hgit file w/ branch mappings anyway, lol - (or .hgit/branches, with .hgit/store as the store (removes need for flag))
+
+-- NOTE NOTE NOTE
+-- can replicate distributed nature of git pretty handily by just having a foreign store send
+-- over list of branch names and pulling from said store via http or w/e
+-- that's.. pretty easy, and I think would probably help this be a v. compelling demo
+
+-- NOTE NOTE NOTE
+-- for status: can setup reader that builds structure from local fs (via file/dir reads)
+--  ..tracking what is substantiated locally vs. not is hard.. must be in repostate! can do.
+--  note: done (probably works)
+
 main :: IO ()
-main = run =<< parse
+main = parse >>= \case
+  InitRepo -> do
+    mkHgitDir -- mk .hgit and .hgit/store dirs
+    writeState initialRepoState
 
-run :: MerkleDiffOpts -> IO ()
-run (MerkleDiffOpts storeDir (Diff before after)) = do
-  let store = fsStore storeDir
-  res <- runExceptT $ compareMerkleTrees store before after
-  print $ fmap fst res
-run (MerkleDiffOpts storeDir (Get p mfp)) = do
-  let store = fsStore storeDir
-  fp <- maybe (createTmpDir "merkle_get") pure mfp
-  _res <- runExceptT $ strictlyDerefAndWrite store fp p
-  putStrLn "done getting!"
-  --print res
-run (MerkleDiffOpts storeDir (Find p query)) = do
-  let store = fsStore storeDir
-  _ <- undefined p query store
-  putStrLn "done putting!"
-  --print res
-run (MerkleDiffOpts storeDir (Put fp)) = do
-  let store = fsStore storeDir
-  _res <- runExceptT $ strictlyReadAndUpload store fp
-  putStrLn "done putting!"
-  --print res
-run (MerkleDiffOpts storeDir Demo) = do -- run the old main method used for testing
-  res' <- runExceptT $ do
-    let store = fsStore storeDir
+  CheckoutBranch branch _ -> do
+    store        <- mkStore
+    base         <- baseDir
+    repostate    <- readState
 
-    -- forget structure of merkle trees and retain only a pointer to the top level
-    let forgetStructure = pointer
+    targetCommit <- getBranch branch repostate >>= sDeref store
 
-    -- read some merkle trees into memory (and into the store) and then forget all but the top pointer
-    before <- mapErrUtil show $ forgetStructure <$> strictlyReadAndUpload store "examples/before/node1"
-    after1 <- mapErrUtil show $ forgetStructure <$> strictlyReadAndUpload store "examples/after1/node1"
-    after2 <- mapErrUtil show $ forgetStructure <$> strictlyReadAndUpload store "examples/after2/node1"
-    after3 <- mapErrUtil show $ forgetStructure <$> strictlyReadAndUpload store "examples/after3/node2"
+    diffs        <- status base repostate store
+    if not (null diffs)
+      then do
+        putStrLn "directory modified, cannot checkout. Changes:"
+        print diffs
+        fail "womp womp"
+      else do
+        currentCommit <- getBranch (currentBranch repostate) repostate >>= sDeref store
+        topLevelCurrentDir <- sDeref store $ commitRoot currentCommit
+        let toDelete = dirEntries topLevelCurrentDir
 
-    mapErrUtil show $ do
-      let s (a,b) = (cata s' a, cata s' b)
-          -- todo pretty printer here
-          s' (C (p, C Nothing)) = show (unPointer p) ++ ":unexpanded"
-          s' (C (p, C (Just (C (n, t))))) = show (unPointer p) ++ ":(" ++ n ++"):" ++ show t
-      liftIO $ putStrLn "comparing before to after1"
-      compareMerkleTrees store before after1 >>= liftIO . print . fmap s
+        -- NOTE: basically only use in a docker container for a bit, lol
+        -- delete each top-level entity in the current commit's root dir
+        -- we just confirmed that there are no diffs btween it and the current dir state
+        let cleanup (p, Left  _) = Dir.removeDirectoryRecursive p
+            cleanup (p, Right _) = Dir.removeFile p
+        _ <- traverse cleanup toDelete
 
-      liftIO $ putStrLn "comparing before to after2"
-      compareMerkleTrees store before after2 >>= liftIO . print . fmap s
+        x <- strictDeref'' . lazyDeref store $ commitRoot targetCommit
+        writeTree base x
+        writeState $ repostate
+                  { currentBranch = branch
+                  }
 
-      liftIO $ putStrLn "comparing before to after3"
-      compareMerkleTrees store before after3 >>= liftIO . print . fmap s
+  MkBranch branch -> do
+    repostate <- readState
+    current   <- getBranch (currentBranch repostate) repostate
+    writeState $ repostate
+               { branches      = M.insert branch (getConst current) $ branches repostate
+               , currentBranch = branch
+               }
 
+  MkCommit msg -> do
+    store             <- mkStore
+    repostate         <- readState
+    base              <- baseDir
+    currentCommitHash <- getBranch (currentBranch repostate) repostate
+    currentStateHash  <- readAndStore store base
+    let commit = Commit msg currentStateHash currentCommitHash
+    hash <- sUploadShallow store commit
+    writeState $ repostate
+               { branches = M.insert (currentBranch repostate) (getConst hash) $ branches repostate
+               }
 
-    liftIO $ putStrLn "streaming search"
-    mapErrUtil show $ derefAndSearch store "ba"  after1
-    liftIO $ putStrLn "end streaming search"
+  GetStatus -> do
+    store     <- mkStore
+    repostate <- readState
+    base      <- baseDir
+    diffs     <- status base repostate store
+    print diffs
 
-    mapErrUtil show $ liftIO (createTmpDir "output-example") >>= flip (strictlyDerefAndWrite store) after3
+  GetDiff branch1 branch2 -> do
+    store     <- mkStore
+    repostate <- readState
+    commit1  <- getBranch branch1 repostate >>= sDeref store
+    commit2  <- getBranch branch2 repostate >>= sDeref store
+    diffs     <- diffMerkleDirs store (commitRoot commit1) (commitRoot commit2)
+    print diffs
 
-  print res'
-
--- | Write tree to file path (using pointer)
-derefAndSearch
-  :: MonadIO m
-  => Store m (Named :+ Tree)
-  -> String
-  -> Pointer
-  -> m ()
-derefAndSearch store query p = consume (liftIO . putStrLn) lazySearch
   where
-    lazyDerefed = cata (Fix . snd . getCompose) -- strip hash annotations
-                $ lazyDeref store p
-    lazySearch  = search query lazyDerefed
+    status base repostate store = do
+      currentCommit <- getBranch (currentBranch repostate) repostate >>= sDeref store
+      -- note: currently adds current repo state to store - could avoid..
+      currentStateHash  <- readAndStore store base
+      diffMerkleDirs store (commitRoot currentCommit) currentStateHash
 
--- | Write tree to file path (using pointer)
-strictlyDerefAndWrite
-  :: MonadIO m
-  => Store m (Named :+ Tree)
-  -> FilePath
-  -> Pointer
-  -> m ()
-strictlyDerefAndWrite store outdir p = do
-  derefed <- cata (Fix . snd . getCompose) -- strip hash annotations
-         <$> strictDeref store p
-  writeTree outdir derefed
 
--- | Read tree from the file system and upload to a store
-strictlyReadAndUpload
-  :: MonadIO m
-  => Store m (Named :+ Tree)
-  -> FilePath
-  -> m StrictMerkleTree
-strictlyReadAndUpload store dir = do
-  let lazyTree = readTree dir
-  strictTree <- cata (\(C effect) -> effect >>= traverse id >>= pure . Fix) lazyTree
-  addToStore store strictTree
+-- IDEA: use 'Pair (Const HashPointer) f' instead of (,) HashPointer :+ f
+commitRoot
+  :: HGit (Term (FC.Compose HashIndirect :++ HGit)) 'CommitTag
+  -> Const HashPointer 'DirTag
+commitRoot (Commit _ (Term (HC (FC.Compose (C (p, _))))) _) = Const p
+commitRoot NullCommit        = emptyDirHash

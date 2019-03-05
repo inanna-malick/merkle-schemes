@@ -1,12 +1,24 @@
-module Errors (MerkleTreeLookupError(..), FileReadError(..))where
+module Errors where
 
 --------------------------------------------
-import           Merkle.Types (Pointer(..))
+import           Control.Exception (Exception)
+--------------------------------------------
+import           HGit.Types (HashPointer, BranchName)
 --------------------------------------------
 
 data MerkleTreeLookupError
-  = EntityNotFoundInStore Pointer
+  = EntityNotFoundInStore HashPointer
   deriving Show
+
+instance Exception MerkleTreeLookupError
+
+
+data RepoStateError
+  = DecodeError String
+  | BranchNotFound BranchName
+  deriving Show
+
+instance Exception RepoStateError
 
 data FileReadError
   = FileReadError FilePath -- tried to read this path but failed (todo better errors? idk lol)

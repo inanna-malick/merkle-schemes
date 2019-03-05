@@ -1,8 +1,6 @@
 FROM ubuntu:18.04
 
-RUN apt-get -y update
-RUN apt-get -y install curl
-RUN curl -sSL https://get.haskellstack.org/ | sh
+RUN apt-get update -y
+RUN apt-get install -y tree
 
-ADD . /devtmp
-RUN cd /devtmp && stack build --only-dependencies
+ADD hgit /usr/bin/hgit
