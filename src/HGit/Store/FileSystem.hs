@@ -32,7 +32,7 @@ fsStore root
   , sUploadShallow = \x -> do
       let bytes = AE.encodingToLazyByteString . AE.toEncoding $ sencode x
           p = hash' x
-          fn = f $ getConst p
+          fn = unHashPointer $ getConst p
       -- liftIO . putStrLn $ "upload thing that hashes to pointer " ++ show p ++ "to state store @ " ++ fn
       liftIO $ B.writeFile (root ++ "/" ++ fn) bytes
       pure p
@@ -62,7 +62,7 @@ fsStore root
                 => Const HashPointer i
                 -> m $ HGit (Term (FC.Compose HashIndirect :++ HGit)) i
     handleDeref (Const p) = do
-      let fn = f p
+      let fn = unHashPointer p
       -- liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via fs state store @ " ++ fn
       contents <- liftIO $ B.readFile (root ++ "/" ++ fn)
       case (AE.eitherDecode contents) of
@@ -70,10 +70,3 @@ fsStore root
         Right (HGitConst x) -> do
           -- liftIO . putStrLn $ "got: " ++ (filter ('\\' /=) $ show contents)
           pure $ hfmap (\(Const p') -> Term $ HC $ FC.Compose $ C (p', Nothing)) x
-
-    chars = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9']
-    base = length chars
-
-    f n | n == 0 = ""
-        | n < 0 = f $ (-1) * n -- increase risk of hash collisions here by 2x, but #YOLO
-        | otherwise = chars !! (n `rem` base) : f (n `div` base)

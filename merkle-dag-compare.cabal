@@ -15,6 +15,7 @@ executable hgit
         FileIO
         HGit.Diff
         HGit.Diff.Types
+        HGit.Merge
         HGit.Repo
         HGit.Serialization
         HGit.Store
@@ -66,7 +67,6 @@ executable hgit
                , bytestring
                , containers
                , constraints
-               , compdata
                , directory
                , free
                , hashable
