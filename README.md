@@ -18,17 +18,13 @@ bash:/repo# tree .hgit
 .hgit
 |-- state
 `-- store
-bash:/repo# cat .hgit/state
-{"branches":{"default":"xqgnewjrafBb"},"currentBranch":"default"}
+bash:/repo# cat .hgit/state.json
+{"branches":{"default":"z"},"currentBranch":"default"}
 ```
 
 `hgit init` creates a `.hgit` directory with a `store` subdir that will be used to store various hash-identified objects (commits, dir trees, file blobs, etc) and a `state` file used to track repo state, which consists of the current branch and a map of branch names to commit pointers.
 
-Repos start with the 'default' branch, which is initialized as pointer to the null commit ("xqgnewjrafBb" is a pointer to the null commit)
-
--- TODO: replace with '0'/'z'
--- TODO: state -> state.json
--- TODO: prev  -> parents
+Repos start with the 'default' branch, which is initialized as pointer to the null commit ("z" (or zero) is used as a pointer to the null commit)
 
 Ok, cool. Let's add some files to the repo.
 
@@ -42,7 +38,7 @@ diffs:
 	EntityCreated at LICENSE
 	EntityCreated at README.md
 bash:/repo# hgit commit "initial demo project"
-bash:/repo# cat .hgit/state
+bash:/repo# cat .hgit/state.json
 {"branches":{"default":"xE9cQhCc0Vvk"},"substantiated":[],"currentBranch":"default"}
 
 ```
@@ -61,7 +57,7 @@ bash:/repo# tree .hgit
 
 
 bash:/repo# cat .hgit/store/xE9cQhCc0Vvk 
-{"root":"xfUffAHam2Ob","name":"initial demo project","type":"commit","prev":["xqgnewjrafBb"]}
+{"root":"xfUffAHam2Ob","name":"initial demo project","type":"commit","parents":["z"]}
 
 bash:/repo# cat .hgit/store/xfUffAHam2Ob 
 {"children":[{"path":"LICENSE","pointer":"yvdB7xqeqRxi","type":"file"},{"path":"README.md","pointer":"xodfMZhuFTpg","type":"file"}],"type":"dir"}
