@@ -87,16 +87,16 @@ diffMerkleDirs' = compareDir []
       -> FileTreeEntity (Term (FC.Compose (LazyHashTagged m) :++ HGit))
       -> FileTreeEntity (Term (FC.Compose (LazyHashTagged m) :++ HGit))
       -> m [([PartialFilePath], Diff)]
-    compareDerefed h path (Left _) (Right _)
+    compareDerefed h path (DirEntity _) (FileEntity _)
       = pure [(h ++ [path], DirReplacedWithFile)]
-    compareDerefed h path (Right _) (Left _)
+    compareDerefed h path (FileEntity _) (DirEntity _)
       = pure [(h ++ [path], FileReplacedWithDir)]
-    compareDerefed h path (Right fc1) (Right fc2)
+    compareDerefed h path (FileEntity fc1) (FileEntity fc2)
       | pointer fc1 /= pointer fc2 = pure [(h ++ [path], FileModified)]
       | otherwise = do
-          -- liftIO $ putStrLn $ "compare Right (file) with Right (file) same pointers"
+          -- liftIO $ putStrLn $ "compare FileEntity (file) with FileEntity (file) same pointers"
           pure []
-    compareDerefed h path (Left dir1) (Left dir2)
+    compareDerefed h path (DirEntity dir1) (DirEntity dir2)
       | pointer dir1 == pointer dir2 = pure []
       | otherwise = compareDir (h ++ [path]) dir1 dir2
 

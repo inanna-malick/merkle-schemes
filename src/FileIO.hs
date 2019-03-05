@@ -44,8 +44,9 @@ writeTree outdir tree = do
             liftIO $ writeFile path "" -- touch file
           handle (pathChunk, e) = do
             modify (push pathChunk)
-            either (\_ -> mkDir) (\_ -> touch) e
-            either getConst getConst e
+            fte (\(_ :: Const (StateT [String] IO ()) 'FileChunkTag) -> touch)
+                (\(_ :: Const (StateT [String] IO ()) 'DirTag) -> mkDir) e
+            fte getConst getConst e
             modify pop
       traverse_ handle children
 
@@ -77,9 +78,9 @@ readAndStore store = fmap Const . getConst . cata alg . readTree
                   pure $ BlobTree xs'
                 Dir xs -> do
                   xs' <- traverse (\(n, et) ->
-                                    (n,) <$> either (fmap (Left . Const) . getConst)
-                                                    (fmap (Right . Const) . getConst)
-                                                     et
+                                    (n,) <$> fte (fmap (FileEntity . Const) . getConst)
+                                                 (fmap (DirEntity . Const) . getConst)
+                                                  et
                                   ) xs
                   pure $ Dir xs'
                 Commit msg a b -> do
@@ -131,11 +132,11 @@ readTree' s path = HC $ FC.Compose $ case s of
     categorize p = do
       isFile <- liftIO $ Dir.doesFileExist p
       if isFile
-        then pure $ (justTheName p, Right $ Hole $ Const p)
+        then pure $ (justTheName p, FileEntity . Hole $ Const p)
         else do
           isDir <- liftIO $ Dir.doesDirectoryExist p
           if isDir
-            then pure $ (justTheName p, Left $ Hole $ Const p)
+            then pure $ (justTheName p, DirEntity . Hole $ Const p)
             else fail ("file read error: unexpected type at " ++ p)
 
 

@@ -58,10 +58,7 @@ sdecode = \case
   where
     parseThingy
       :: Value
-      -> Parser ( PartialFilePath
-                , Either (Const HashPointer 'DirTag)
-                         (Const HashPointer 'FileChunkTag)
-                )
+      -> Parser $ NamedFileTreeEntity (Const HashPointer)
     parseThingy = decodeNamedDir -- both branches just Const pointers
       (fmap Const . (.: "pointer")) (fmap Const . (.: "pointer"))
 
@@ -74,8 +71,8 @@ encodeNamedDir ed ef (path, e)
   = object $
   [ "path" .= path
   ] ++ case e of
-        Left  dir  -> ["type" .= ("dir" :: Text)] ++ ed dir
-        Right file -> ["type" .= ("file" :: Text)] ++ ef file
+        DirEntity  dir  -> ["type" .= ("dir" :: Text)] ++ ed dir
+        FileEntity file -> ["type" .= ("file" :: Text)] ++ ef file
 
 decodeNamedDir
   :: (Object -> Parser (f 'DirTag))
@@ -89,10 +86,10 @@ decodeNamedDir pd pf
         case typ of
           "dir"  -> do
             e <- pd v
-            pure (name, Left e)
+            pure (name, DirEntity e)
           "file" -> do
             e <- pf v
-            pure (name, Right e)
+            pure (name, FileEntity e)
           x      -> fail $ "require [file, dir] type" ++ x
 
 sencode :: HGit (Const HashPointer) x -> Value
