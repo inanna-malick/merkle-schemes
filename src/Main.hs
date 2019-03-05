@@ -3,6 +3,7 @@ module Main where
 --------------------------------------------
 import           Data.Functor.Const
 import qualified Data.Functor.Compose as FC
+import qualified Data.List as L
 import qualified Data.Map as M
 import qualified System.Directory as Dir
 --------------------------------------------
@@ -67,7 +68,7 @@ main = parse >>= \case
     if not (null diffs)
       then do
         putStrLn "directory modified, cannot checkout. Changes:"
-        print diffs
+        _ <- traverse renderDiff diffs
         fail "womp womp"
       else do
         currentCommit <- getBranch (currentBranch repostate) repostate >>= sDeref store
@@ -112,7 +113,11 @@ main = parse >>= \case
     repostate <- readState
     base      <- baseDir
     diffs     <- status base repostate store
-    print diffs
+
+    putStrLn $ "current branch: " ++ currentBranch repostate
+    putStrLn $ "diffs:"
+    _ <- traverse renderDiff diffs
+    pure ()
 
   GetDiff branch1 branch2 -> do
     store     <- mkStore
@@ -120,9 +125,12 @@ main = parse >>= \case
     commit1  <- getBranch branch1 repostate >>= sDeref store
     commit2  <- getBranch branch2 repostate >>= sDeref store
     diffs     <- diffMerkleDirs store (commitRoot commit1) (commitRoot commit2)
-    print diffs
+    _ <- traverse renderDiff diffs
+    pure ()
 
   where
+    renderDiff (fps, d) = putStrLn $ "\t" ++ show d ++ " at " ++ (L.intercalate "/" fps)
+
     status base repostate store = do
       currentCommit <- getBranch (currentBranch repostate) repostate >>= sDeref store
       -- note: currently adds current repo state to store - could avoid..
