@@ -1,13 +1,14 @@
 
-module Commands (MerkleDiffOpts(..), Command(..), parse)where
+module Commands (Command(..), parse)where
 
 import Options.Applicative
+import Data.List.NonEmpty
 import Data.Semigroup ((<>))
 
-import Merkle.Types
+import HGit.Types
 
 
-parse :: IO MerkleDiffOpts
+parse :: IO Command
 parse = execParser opts
   where
     opts = info (parser <**> helper)
@@ -15,60 +16,61 @@ parse = execParser opts
      <> progDesc "Print a greeting for TARGET"
      <> header "hello - a test for optparse-applicative" )
 
-data MerkleDiffOpts
-  =  MerkleDiffOpts
-  { storePath  :: FilePath
-  , commandOpt :: Command
-  }
+data PathMatcher = WildCard -- | Concrete String
 
--- todo records for each?
 data Command
-  = Put  FilePath -- Pointer
-  | Get  Pointer (Maybe FilePath) -- write to temp file if Nothing
-  | Diff Pointer Pointer
-  | Demo -- run old main
-  | Find Pointer String -- todo: find first and terminate? or keep going?
+  -- switch directory state to that of new branch (nuke and rebuild via store)
+  -- fails if any changes exist in current dir (diff via status /= [])
+  = CheckoutBranch BranchName (NonEmpty PathMatcher)
+  -- create new branch with same root commit as current branch. changes are fine
+  | MkBranch BranchName
+  -- add everything in current repo to the current branch in a new commit w/ msg
+  -- and update current branch
+  -- initialize repo in current directory with provided name
+  | InitRepo
+  | MkCommit CommitMessage
+  | GetStatus -- get status of current repo (diff current state vs. that of last commit on branch)
+  | GetDiff BranchName BranchName
 
-
-fileOpt :: String -> Char -> String -> String -> Parser FilePath
-fileOpt l s h m = strOption
-  (  long l
-  <> short s
-  <> metavar m
-  <> help h)
-
-
-fileInput, fileOutput, storeDir :: Parser FilePath
-fileInput  = fileOpt "file" 'f' "Input File" "FILENAME"
-fileOutput = fileOpt "file" 'f' "Output File" "FILENAME"
-storeDir   = fileOpt "store" 's' "Store Path" "STORE_PATH"
-
-
-pointerInput :: String -> Char -> String -> Parser Pointer
-pointerInput m s l = Pointer <$> option auto
-            ( long l
-           <> short s
-           <> metavar m
-           <> help "Output the last K lines" )
-
-
-parser :: Parser MerkleDiffOpts
+parser :: Parser Command
 parser
-  = MerkleDiffOpts
-      <$>
-       storeDir
-      <*>
-       subparser
-       ( command "put"  (info putOptions  ( progDesc "read a dir tree from the fs and upload it to the repo" ))
-      <> command "get"  (info getOptions  ( progDesc "read a tree from the repo and write it to the fs" ))
-      <> command "diff" (info diffOptions  ( progDesc "diff two merkle trees" ))
-      <> command "demo" (info (pure Demo)  ( progDesc "run random demo thingy" ))
-      <> command "find" (info findOptions  ( progDesc "lazily search a merkle tree" ))
-       )
+  = subparser
+     ( command "checkout" (info checkoutOptions  ( progDesc "checkout a branch"     ))
+    <> command "branch"   (info branchOptions    ( progDesc "create a new branch"   ))
+    <> command "init"     (info initOptions      ( progDesc "create a new repo"     ))
+    <> command "commit"   (info commitOptions    ( progDesc "create a new commit"   ))
+    <> command "status"   (info statusOptions    ( progDesc "show repo status"      ))
+    <> command "diff"     (info diffOptions      ( progDesc "show diff of branches" ))
+      )
   where
-    putOptions  = Put  <$> fileInput
-    getOptions  = Get  <$> pointerInput "P" 'p' "pointer" <*> optional fileOutput
-    findOptions = Find <$> pointerInput "P" 'p' "pointer" <*> fileInput
-    diffOptions = Diff
-              <$> pointerInput "BEFORE" 'b' "before"
-              <*> pointerInput "AFTER"  'a'  "after"
+    checkoutOptions
+        = CheckoutBranch
+      <$> strArgument
+          ( metavar "BRANCHNAME"
+         <> help "branch to checkout"
+          )
+      <*> pure (pure WildCard) -- placeholder
+    branchOptions
+        = MkBranch
+      <$> strArgument
+          ( metavar "BRANCHNAME"
+         <> help "branch to create"
+          )
+    initOptions  = pure InitRepo
+    commitOptions
+        = MkCommit
+      <$> strArgument
+          ( metavar "MESSAGE"
+         <> help "commit msg"
+          )
+    statusOptions  = pure GetStatus
+    diffOptions
+        = GetDiff
+      <$> strArgument
+          ( metavar "BEFORE"
+         <> help "'before' branch name"
+          )
+      <*> strArgument
+          ( metavar "AFTER"
+         <> help "'after' branch name"
+          )
