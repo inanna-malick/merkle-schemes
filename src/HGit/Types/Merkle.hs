@@ -14,11 +14,16 @@ $(singletons [d|
   data HGitTag = FileChunkTag | DirTag | CommitTag
  |])
 
+data FileTreeEntity f
+  = FileEntity (f 'FileChunkTag) -- a file (named blobtree)
+  | DirEntity  (f 'DirTag)       -- more directory structure
 
-
-type FileTreeEntity f
-  = Either (f 'DirTag)       -- more directory structure
-           (f 'FileChunkTag) -- a file (named blob)
+fte :: (f 'FileChunkTag -> a)
+    -> (f 'DirTag       -> a)
+    -> FileTreeEntity f
+    -> a
+fte f _ (FileEntity x) = f x
+fte _ g (DirEntity  x) = g x
 
 type NamedFileTreeEntity f
   = ( PartialFilePath -- name of this directory entry (files and dirs have same name rules)
@@ -53,7 +58,7 @@ dirEntries (Dir ns) = ns
 instance HFunctor HGit where
   hfmap _ (Blob fc)        = Blob fc
   hfmap f (BlobTree fcs)   = BlobTree $ fmap f fcs
-  hfmap f (Dir dcs)        = Dir $ fmap (fmap (either (Left . f) (Right . f))) dcs
+  hfmap f (Dir dcs)        = Dir $ fmap (fmap (fte (FileEntity . f) (DirEntity . f))) dcs
   hfmap f (Commit n rc nc) = Commit n (f rc) (f nc)
   hfmap _  NullCommit      = NullCommit
 
@@ -64,8 +69,8 @@ instance HTraversable HGit where
     fcs' <- traverse nat fcs
     pure $ BlobTree fcs'
   hmapM nat (Dir dcs) = do
-    let f (n, Left dir)   = fmap ((n,) . Left)  $ nat dir
-        f (n, Right file) = fmap ((n,) . Right) $ nat file
+    let f (n, DirEntity dir)   = fmap ((n,) . DirEntity)  $ nat dir
+        f (n, FileEntity file) = fmap ((n,) . FileEntity) $ nat file
     dcs' <- traverse f dcs
     pure $ Dir dcs'
   hmapM nat (Commit msg rc nc) = do
@@ -78,13 +83,10 @@ instance HTraversable HGit where
 instance SHFunctor HGit where
   shfmap _ (Blob fc)        = Blob fc
   shfmap f (BlobTree fcs)   = BlobTree $ fmap f fcs
-  shfmap f (Dir dcs)        = Dir $ fmap (fmap (either (Left . f) (Right . f))) dcs
+  shfmap f (Dir dcs)        = Dir $ fmap (fmap (fte (FileEntity . f) (DirEntity . f))) dcs
   shfmap f (Commit n rc nc) = Commit n (f rc) (f nc)
   shfmap _  NullCommit      = NullCommit
 
-
--- TODO/NOTE: is this just ctx with hash pointer shaped holes?
---            idk, but can't do recursion schemes over that, can I?
 type HashIndirect = (,) HashPointer :+ Maybe
 type LazyHashTagged m = (,) HashPointer :+ m
 

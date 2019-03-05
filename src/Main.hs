@@ -78,8 +78,8 @@ main = parse >>= \case
         -- NOTE: basically only use in a docker container for a bit, lol
         -- delete each top-level entity in the current commit's root dir
         -- we just confirmed that there are no diffs btween it and the current dir state
-        let cleanup (p, Left  _) = Dir.removeDirectoryRecursive p
-            cleanup (p, Right _) = Dir.removeFile p
+        let cleanup (p, DirEntity  _) = Dir.removeDirectoryRecursive p
+            cleanup (p, FileEntity _) = Dir.removeFile p
         _ <- traverse cleanup toDelete
 
         x <- strictDeref'' . lazyDeref store $ commitRoot targetCommit
