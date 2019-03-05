@@ -37,6 +37,21 @@ initialRepoState
     initial = "default"
 
 
+instance ToJSON RepoState where
+    toJSON (RepoState bs cb st) =
+      object
+      [ "branches"      .= (M.map unHashPointer bs)
+      , "currentBranch" .= cb
+      , "substantiated" .= st
+      ]
+instance FromJSON RepoState where
+    parseJSON = withObject "RepoState" $ \o -> do
+      bs <- o .: "branches"
+      cb <- o .: "currentBranch"
+      s  <- o .: "substantiated"
+      pure $ RepoState (M.map HashPointer bs) cb s
+
+
 -- for diffing: just traverse this and, for each substantiated path, ingest and compare file
 -- note: this will end up being a big ass object if each file is substantiated - can't force
 -- via type level but MUST ENFORCE that no file blobs are represented inline here, just dir structure
@@ -52,11 +67,11 @@ instance FromJSON SubstantiationState where
         mkElem v = decodeNamedDir handleDir handleFile v
         handleFile o = do
           p <- o .: "pointer"
-          pure . Term . HC . FC.Compose $ C (p, Nothing)
+          pure . Term . HC . FC.Compose $ C (HashPointer p, Nothing)
         handleDir o = do
           p <- o .:  "pointer"
           e <- o .:? "entity"
-          pure . Term . HC . FC.Compose $ C (p, unSubstantiationState <$> e)
+          pure . Term . HC . FC.Compose $ C (HashPointer p, unSubstantiationState <$> e)
 
 instance ToJSON SubstantiationState where
     toJSON (SubstantiationState (Dir xs)) =
@@ -68,13 +83,9 @@ instance ToJSON SubstantiationState where
           :: forall i x y
            . Term (FC.Compose ((,) HashPointer :+ x) :++ y) i
           -> [(Text, Value)]
-        handleFile (Term (HC (FC.Compose (C (p, _))))) = ["pointer" .= p]
-        handleDir  (Term (HC (FC.Compose (C (p, Nothing))))) = ["pointer" .= p]
+        handleFile (Term (HC (FC.Compose (C (p, _))))) = ["pointer" .= unHashPointer p]
+        handleDir  (Term (HC (FC.Compose (C (p, Nothing))))) = ["pointer" .= unHashPointer p]
         handleDir  (Term (HC (FC.Compose (C (p, Just dir)))))
-          = ["pointer" .= p
+          = ["pointer" .= unHashPointer p
             ,"children"  .= SubstantiationState dir
             ]
-
-instance ToJSON RepoState where
-    toEncoding = genericToEncoding defaultOptions
-instance FromJSON RepoState

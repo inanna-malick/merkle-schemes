@@ -29,7 +29,7 @@ sdecode = \case
         case typ of
           "blobtree" -> do
               children <- v .: "children"
-              pure $ BlobTree $ fmap Const children
+              pure $ BlobTree $ fmap (Const . HashPointer) children
           "blob" -> do
               contents <- v .: "contents"
               pure $ Blob contents
@@ -52,7 +52,7 @@ sdecode = \case
               name <- v .: "name"
               root <- v .: "root"
               prev <- v .: "prev"
-              pure $ Commit name (Const root) (Const prev)
+              pure $ Commit name (Const $ HashPointer root) (fmap (Const . HashPointer) prev)
           x -> fail $ "require [commit, nullcommit] type" ++ x
 
   where
@@ -60,7 +60,7 @@ sdecode = \case
       :: Value
       -> Parser $ NamedFileTreeEntity (Const HashPointer)
     parseThingy = decodeNamedDir -- both branches just Const pointers
-      (fmap Const . (.: "pointer")) (fmap Const . (.: "pointer"))
+      (fmap (Const . HashPointer) . (.: "pointer")) (fmap (Const . HashPointer) . (.: "pointer"))
 
 encodeNamedDir
   :: (f 'DirTag       -> [(Text, Value)])
@@ -100,7 +100,7 @@ sencode = \case
                ]
     BlobTree children ->
         object [ "type"     .= ("blobtree" :: Text)
-               , "children" .= fmap getConst children
+               , "children" .= fmap (unHashPointer . getConst) children
                ]
 
     Dir children ->
@@ -111,8 +111,8 @@ sencode = \case
     Commit name root prev ->
         object [ "type" .= ("commit" :: Text)
                , "name" .= pack name
-               , "root" .= getConst root
-               , "prev" .= getConst prev
+               , "root" .= (unHashPointer $ getConst root)
+               , "prev" .= fmap (unHashPointer . getConst) prev
                ]
     NullCommit ->
         object [ "type" .= ("nullcommit" :: Text)
@@ -120,12 +120,12 @@ sencode = \case
 
   where
     mkThingy :: NamedFileTreeEntity (Const HashPointer) -> Value
-    mkThingy = encodeNamedDir (pure . ("pointer" .=) . getConst)
-                              (pure . ("pointer" .=) . getConst)
+    mkThingy = encodeNamedDir (pure . ("pointer" .=) . unHashPointer . getConst)
+                              (pure . ("pointer" .=) . unHashPointer . getConst)
 
 
 hash :: HGit (Const HashPointer) x -> HashPointer
-hash = H.hash . sencode
+hash = mkHashPointer . H.hash . sencode
 
 
 hash' :: HGit (Const HashPointer) :-> Const HashPointer

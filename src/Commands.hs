@@ -24,6 +24,8 @@ data Command
   = CheckoutBranch BranchName (NonEmpty PathMatcher)
   -- create new branch with same root commit as current branch. changes are fine
   | MkBranch BranchName
+  -- merge some branch into the current one (requires no changes)
+  | MkMergeCommit BranchName CommitMessage
   -- add everything in current repo to the current branch in a new commit w/ msg
   -- and update current branch
   -- initialize repo in current directory with provided name
@@ -41,6 +43,7 @@ parser
     <> command "commit"   (info commitOptions    ( progDesc "create a new commit"   ))
     <> command "status"   (info statusOptions    ( progDesc "show repo status"      ))
     <> command "diff"     (info diffOptions      ( progDesc "show diff of branches" ))
+    <> command "merge"    (info mergeOptions     ( progDesc "merge a branch into the current one" ))
       )
   where
     checkoutOptions
@@ -60,6 +63,16 @@ parser
     commitOptions
         = MkCommit
       <$> strArgument
+          ( metavar "MESSAGE"
+         <> help "commit msg"
+          )
+    mergeOptions
+        = MkMergeCommit
+      <$> strArgument
+          ( metavar "BRANCHNAME"
+         <> help "branch to merge into the current one"
+          )
+      <*> strArgument
           ( metavar "MESSAGE"
          <> help "commit msg"
           )
