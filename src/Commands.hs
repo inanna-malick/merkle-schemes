@@ -13,8 +13,8 @@ parse = execParser opts
   where
     opts = info (parser <**> helper)
       ( fullDesc
-     <> progDesc "Print a greeting for TARGET"
-     <> header "hello - a test for optparse-applicative" )
+     <> progDesc "do some git/mercurial type stuff"
+     <> header "hgit - an implementation of core git/mercurial features using recursion schemes" )
 
 data PathMatcher = WildCard -- | Concrete String
 
