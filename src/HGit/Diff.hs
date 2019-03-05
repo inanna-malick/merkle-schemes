@@ -99,11 +99,3 @@ diffMerkleDirs' = compareDir []
     compareDerefed h path (DirEntity dir1) (DirEntity dir2)
       | pointer dir1 == pointer dir2 = pure []
       | otherwise = compareDir (h ++ [path]) dir1 dir2
-
-
-
-derefLayer
-  :: forall f m
-  . NatM m (Term (FC.Compose (LazyHashTagged m) :++ f))
-            (f (Term (FC.Compose (LazyHashTagged m) :++ f)))
-derefLayer (Term (HC (FC.Compose (C (_p, m))))) = m

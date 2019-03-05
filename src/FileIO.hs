@@ -85,8 +85,8 @@ readAndStore store = fmap Const . getConst . cata alg . readTree
                   pure $ Dir xs'
                 Commit msg a b -> do
                   a' <- getConst a
-                  b' <- getConst b
-                  pure $ Commit msg (Const a') (Const b')
+                  b' <- traverse getConst b
+                  pure $ Commit msg (Const a') (fmap Const b')
                 NullCommit ->
                   pure $ NullCommit
       e' <- f e
