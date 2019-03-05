@@ -19,7 +19,7 @@ mkHashPointer p = HashPointer $ prefix p ++ f (abs p)
     base = length chars
 
     f n | n == 0 = ""
-        | n < 0 = f $ (-1) * n -- increase risk of hash collisions here by 2x, but #YOLO
+        | n < 0 = f $ (-1) * n -- no loss of info, handled via prefix
         | otherwise = chars !! (n `rem` base) : f (n `div` base)
 
 newtype HashPointer = HashPointer { unHashPointer :: String }
