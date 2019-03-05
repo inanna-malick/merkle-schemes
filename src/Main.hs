@@ -4,6 +4,7 @@ module Main where
 import           Data.Functor.Const
 import qualified Data.Functor.Compose as FC
 import qualified Data.List as L
+import           Data.List.NonEmpty
 import qualified Data.Map as M
 import qualified System.Directory as Dir
 --------------------------------------------
@@ -12,6 +13,7 @@ import           FileIO
 import           HGit.Diff (diffMerkleDirs)
 import           HGit.Repo
 import           HGit.Types
+import           HGit.Merge
 import           Util.MyCompose
 import           Util.HRecursionSchemes
 import           HGit.Serialization (emptyDirHash)
@@ -73,17 +75,8 @@ main = parse >>= \case
       else do
         currentCommit <- getBranch (currentBranch repostate) repostate >>= sDeref store
         topLevelCurrentDir <- sDeref store $ commitRoot currentCommit
-        let toDelete = dirEntries topLevelCurrentDir
 
-        -- NOTE: basically only use in a docker container for a bit, lol
-        -- delete each top-level entity in the current commit's root dir
-        -- we just confirmed that there are no diffs btween it and the current dir state
-        let cleanup (p, DirEntity  _) = Dir.removeDirectoryRecursive p
-            cleanup (p, FileEntity _) = Dir.removeFile p
-        _ <- traverse cleanup toDelete
-
-        x <- strictDeref'' . lazyDeref store $ commitRoot targetCommit
-        writeTree base x
+        setDirTo store base topLevelCurrentDir (commitRoot targetCommit)
         writeState $ repostate
                   { currentBranch = branch
                   }
@@ -102,11 +95,46 @@ main = parse >>= \case
     base              <- baseDir
     currentCommitHash <- getBranch (currentBranch repostate) repostate
     currentStateHash  <- readAndStore store base
-    let commit = Commit msg currentStateHash currentCommitHash
+    let commit = Commit msg currentStateHash (pure currentCommitHash)
     hash <- sUploadShallow store commit
     writeState $ repostate
                { branches = M.insert (currentBranch repostate) (getConst hash) $ branches repostate
                }
+
+  -- todo: n-way branch merge once I figure out UX
+  MkMergeCommit targetBranch msg -> do
+    store             <- mkStore
+    repostate         <- readState
+    base              <- baseDir
+
+    diffs        <- status base repostate store
+    if not (null diffs)
+      then do
+        putStrLn "directory modified, cannot merge. Changes:"
+        _ <- traverse renderDiff diffs
+        fail "womp womp"
+      else do
+
+        targetCommitHash  <- getBranch targetBranch repostate
+        currentCommitHash <- getBranch (currentBranch repostate) repostate
+
+        currentCommit <- sDeref store currentCommitHash
+        targetCommit <- sDeref store targetCommitHash
+
+        mergeRes <- mergeMerkleDirs store (commitRoot currentCommit) (commitRoot targetCommit)
+
+        case mergeRes of
+          Left err -> fail $ "merge nonviable due to: " ++ show err
+          Right root -> do
+            let commit = Commit msg (pointer' root) $ currentCommitHash :| [targetCommitHash]
+            hash <- sUploadShallow store commit
+            writeState $ repostate
+                       { branches = M.insert (currentBranch repostate) (getConst hash) $ branches repostate
+                       }
+
+
+            topLevelCurrentDir <- sDeref store $ commitRoot currentCommit
+            setDirTo store base topLevelCurrentDir $ pointer' root
 
   GetStatus -> do
     store     <- mkStore
@@ -136,6 +164,21 @@ main = parse >>= \case
       -- note: currently adds current repo state to store - could avoid..
       currentStateHash  <- readAndStore store base
       diffMerkleDirs store (commitRoot currentCommit) currentStateHash
+
+
+
+    setDirTo store base topLevelCurrentDir targetDir = do
+      let toDelete = dirEntries topLevelCurrentDir
+
+      -- NOTE: basically only use in a docker container for a bit, lol
+      -- delete each top-level entity in the current commit's root dir
+      -- we just confirmed that there are no diffs btween it and the current dir state
+      let cleanup (p, DirEntity  _) = Dir.removeDirectoryRecursive p
+          cleanup (p, FileEntity _) = Dir.removeFile p
+      _ <- traverse cleanup toDelete
+
+      x <- strictDeref'' $ lazyDeref store targetDir
+      writeTree base x
 
 
 -- IDEA: use 'Pair (Const HashPointer) f' instead of (,) HashPointer :+ f

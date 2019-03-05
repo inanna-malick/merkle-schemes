@@ -1,6 +1,7 @@
 module HGit.Types.Merkle where
 
 --------------------------------------------
+import           Data.List.NonEmpty
 import           Data.Functor.Const
 import qualified Data.Functor.Compose as FC
 import           Data.Singletons.TH
@@ -36,14 +37,13 @@ data HGit a i where
   BlobTree :: [a 'FileChunkTag] -> HGit a 'FileChunkTag
 
   -- dir and file bits
-  -- TODO: dedicated sum type for file type branches - could use to represent (eg) symlinks or w/e
   Dir :: [NamedFileTreeEntity a]
       -> HGit a 'DirTag
 
   -- commits
   Commit :: CommitMessage
-         -> a 'DirTag         -- root directory (itself unnamed)
-         -> a 'CommitTag      -- previous commit
+         -> a 'DirTag               -- root directory (itself unnamed)
+         -> NonEmpty (a 'CommitTag) -- parent commits (at least one)
          -> HGit a 'CommitTag
   NullCommit :: HGit a 'CommitTag
 
@@ -59,7 +59,7 @@ instance HFunctor HGit where
   hfmap _ (Blob fc)        = Blob fc
   hfmap f (BlobTree fcs)   = BlobTree $ fmap f fcs
   hfmap f (Dir dcs)        = Dir $ fmap (fmap (fte (FileEntity . f) (DirEntity . f))) dcs
-  hfmap f (Commit n rc nc) = Commit n (f rc) (f nc)
+  hfmap f (Commit n rc nc) = Commit n (f rc) (fmap f nc)
   hfmap _  NullCommit      = NullCommit
 
 
@@ -73,10 +73,10 @@ instance HTraversable HGit where
         f (n, FileEntity file) = fmap ((n,) . FileEntity) $ nat file
     dcs' <- traverse f dcs
     pure $ Dir dcs'
-  hmapM nat (Commit msg rc nc) = do
+  hmapM nat (Commit msg rc ncs) = do
     rc' <- nat rc
-    nc' <- nat nc
-    pure $ Commit msg rc' nc'
+    ncs' <- traverse nat ncs
+    pure $ Commit msg rc' ncs'
   hmapM _  NullCommit = pure NullCommit
 
 
@@ -84,7 +84,7 @@ instance SHFunctor HGit where
   shfmap _ (Blob fc)        = Blob fc
   shfmap f (BlobTree fcs)   = BlobTree $ fmap f fcs
   shfmap f (Dir dcs)        = Dir $ fmap (fmap (fte (FileEntity . f) (DirEntity . f))) dcs
-  shfmap f (Commit n rc nc) = Commit n (f rc) (f nc)
+  shfmap f (Commit n rc ncs) = Commit n (f rc) (fmap f ncs)
   shfmap _  NullCommit      = NullCommit
 
 type HashIndirect = (,) HashPointer :+ Maybe
@@ -95,3 +95,9 @@ pointer (Term (HC (FC.Compose (C (p, _))))) = p
 
 pointer' :: forall f x . Term (FC.Compose ((,) HashPointer :+ x) :++ f) :-> Const HashPointer
 pointer' = Const . pointer
+
+derefLayer
+  :: forall f m
+  . NatM m (Term (FC.Compose (LazyHashTagged m) :++ f))
+            (f (Term (FC.Compose (LazyHashTagged m) :++ f)))
+derefLayer (Term (HC (FC.Compose (C (_p, m))))) = m
