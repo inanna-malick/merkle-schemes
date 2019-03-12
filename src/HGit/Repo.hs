@@ -7,14 +7,17 @@ import           Control.Exception.Safe (MonadThrow, throw)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Aeson as AE
 import qualified Data.ByteString.Lazy as B
-import           Data.Functor.Const
 import qualified Data.Map as M
+import           Data.Singletons
 import qualified System.Directory as Dir
 --------------------------------------------
 import           Errors
+import qualified HGit.Serialization as Ser
 import           HGit.Types
-import           HGit.Store
-import           HGit.Store.FileSystem (fsStore)
+import           Merkle.Types (HashPointer)
+import           Merkle.Store
+import           Merkle.Store.FileSystem (fsStore)
+import           Util.HRecursionSchemes (Const)
 --------------------------------------------
 
 
@@ -41,8 +44,17 @@ mkStore
   :: MonadIO m
   => MonadThrow m
   => m (Store m HGit)
-mkStore = fsStore <$> hgitStore'
-
+mkStore = fsStore Ser.structuralHash Ser.sencode Ser.sdecode exceptions <$> hgitStore'
+  where
+    exceptions :: forall i x . SingI i => Const HashPointer i -> Maybe (HGit x i)
+    exceptions x = case sing @i of
+      SCommitTag -> if x == Ser.nullCommitHash
+                 then Just NullCommit
+                 else Nothing
+      SDirTag -> if x == Ser.emptyDirHash
+                 then Just (Dir [])
+                 else Nothing
+      _ -> Nothing
 
 -- | get branch from state, fail if not found
 getBranch
@@ -51,7 +63,7 @@ getBranch
   -> RepoState
   -> m (Const HashPointer 'CommitTag)
 getBranch b
-  = maybe (throw $ BranchNotFound b) (pure . Const) . M.lookup b . branches
+  = maybe (throw $ BranchNotFound b) pure . M.lookup b . branches
 
 -- | Filesystem backed store using the provided dir
 readState

@@ -8,91 +8,51 @@ import           Control.Monad.Trans.State.Lazy
 import qualified Data.List as List
 import           Data.Foldable (traverse_)
 import qualified Data.Functor.Compose as FC
-import           Data.Functor.Const
 import           Data.Singletons
 import qualified System.Directory as Dir
 --------------------------------------------
 import           Util.MyCompose
 import           Util.HRecursionSchemes
-import           HGit.Store
 import           HGit.Types
 --------------------------------------------
 
 -- | Write strict hgit dirtree to file path
 writeTree
-  :: MonadIO m
+  :: forall m
+   . MonadIO m
   => FilePath
   -> Term HGit 'DirTag
   -> m ()
-writeTree outdir tree = do
-  liftIO $ evalStateT (getConst $ sCata alg tree) [outdir]
-
+writeTree outdir tree = evalStateT (writeDir tree) [outdir]
   where
-    alg :: SAlg HGit (Const $ StateT [FilePath] IO ())
-    alg (Blob contents)    = Const $ do -- append - will open file handle multiple times, w/e, can cache via state later
-      path <- List.intercalate "/" . reverse <$> get
-      liftIO $ appendFile path contents
+    writeFileChunk :: Term HGit 'BlobTag -> StateT [FilePath] m ()
+    writeFileChunk (Term (Blob contents)) =
+      gets (List.intercalate "/" . reverse) >>=  liftIO . flip writeFile contents
+    writeDir :: Term HGit 'DirTag -> StateT [FilePath] m ()
+    writeDir (Term (Dir children)) = flip traverse_ children $ \(pathChunk, e) -> do
+      modify (push pathChunk)
+      fte (\(_ :: Term HGit 'BlobTag) -> touch)
+          (\(_ :: Term HGit 'DirTag) -> mkDir) e
+      fte writeFileChunk writeDir e
+      modify pop
 
-    alg (BlobTree children) = Const $ traverse_ getConst children
 
-    alg (Dir children) = Const $ do -- mkdir
-      let mkDir = do
-            path <- List.intercalate "/" . reverse <$> get
-            liftIO $ Dir.createDirectory path
-          touch = do
-            path <- List.intercalate "/" . reverse <$> get
-            liftIO $ writeFile path "" -- touch file
-          handle (pathChunk, e) = do
-            modify (push pathChunk)
-            fte (\(_ :: Const (StateT [String] IO ()) 'FileChunkTag) -> touch)
-                (\(_ :: Const (StateT [String] IO ()) 'DirTag) -> mkDir) e
-            fte getConst getConst e
-            modify pop
-      traverse_ handle children
-
-    -- unreachable
-    alg _ = Const $ fail "*sarcastic air quotes* unreachable *end sarcastic air quotes*"
+    mkDir = gets (List.intercalate "/" . reverse) >>= liftIO . Dir.createDirectory
+    touch = gets (List.intercalate "/" . reverse) >>= liftIO . flip writeFile ""
 
     push x xs = x:xs
     pop (_:xs)  = xs
     pop []    = []
 
 
-readAndStore
-  :: forall m
-   . MonadIO m
-  => Store m HGit
-  -> FilePath
-  -> m (Const HashPointer 'DirTag)
-readAndStore store = fmap Const . getConst . cata alg . readTree
+readTreeStrict
+  :: MonadIO m
+  => FilePath
+  -> m $ Term (HGit) 'DirTag
+readTreeStrict = anaM alg . readTree
   where
-    alg :: Alg (FC.Compose m :++ HGit) (Const (m HashPointer))
-    alg (HC (FC.Compose eff)) = Const $ do
-      e <- eff
-      -- upload sub-trees and get hashes
-      let f :: forall i . HGit (Const (m HashPointer)) i -> m (HGit (Const (HashPointer)) i)
-          f = \case
-                Blob x -> pure $ Blob x
-                BlobTree xs -> do
-                  xs' <- traverse (fmap Const . getConst) xs
-                  pure $ BlobTree xs'
-                Dir xs -> do
-                  xs' <- traverse (\(n, et) ->
-                                    (n,) <$> fte (fmap (FileEntity . Const) . getConst)
-                                                 (fmap (DirEntity . Const) . getConst)
-                                                  et
-                                  ) xs
-                  pure $ Dir xs'
-                Commit msg a b -> do
-                  a' <- getConst a
-                  b' <- traverse getConst b
-                  pure $ Commit msg (Const a') (fmap Const b')
-                NullCommit ->
-                  pure $ NullCommit
-      e' <- f e
-
-      -- hax (todo chain through)
-      fmap getConst $ sUploadShallow store e'
+    alg :: CoalgM m HGit (Term (FC.Compose m :++ HGit))
+    alg (Term (HC (FC.Compose eff))) = eff
 
 -- | Lazily read some directory tree into memory
 -- NOTE: this needs to be a futu so file steps can read the full file into memory instead of recursing into filepointers (note 2: is this till true? idk lol)
@@ -104,16 +64,16 @@ readTree
   -- type-level guarantee that there is no hash identified
   -- entity indirection allowed here
   -> Term (FC.Compose m :++ HGit) 'DirTag
-readTree = sFutu alg . Const
+readTree = futu alg . Const -- NOTE: might not need to be futu now that now BLOBTREE!
   where
-    alg :: SCVCoalg (FC.Compose m :++ HGit) (Const FilePath)
+    alg :: CVCoalg (FC.Compose m :++ HGit) (Const FilePath)
     alg (Const path) = readTree' sing path
 
 readTree'
   :: forall x m . MonadIO m => Sing x -> FilePath
   -> (FC.Compose m :++ HGit) (Cxt Hole (FC.Compose m :++ HGit) (Const FilePath)) x
 readTree' s path = HC $ FC.Compose $ case s of
-      SFileChunkTag -> liftIO $ fmap Blob $ readFile path
+      SBlobTag -> liftIO $ fmap Blob $ readFile path
       SDirTag -> do
           -- liftIO $ putStrLn $ "readTree' path: " ++ path
           dirContents  <- liftIO $ Dir.getDirectoryContents path
@@ -125,6 +85,8 @@ readTree' s path = HC $ FC.Compose $ case s of
           dirContents'' <- traverse categorize dirContents'
           pure $ Dir $ fmap (\(p,e) -> (justTheName p, e)) dirContents''
 
+      -- IDEA: use some kind of type-level hlist of SBlobTag, SDirTag, etc to somehow restrict
+      --       to a subset of a datakind?
       -- unreachable
       _ -> fail ("quote 'unreachable' unquote")
 
