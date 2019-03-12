@@ -3,7 +3,8 @@ module Errors where
 --------------------------------------------
 import           Control.Exception (Exception)
 --------------------------------------------
-import           HGit.Types (HashPointer, BranchName)
+import           Merkle.Types (HashPointer)
+import           HGit.Types   (BranchName)
 --------------------------------------------
 
 data MerkleTreeLookupError

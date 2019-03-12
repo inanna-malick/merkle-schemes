@@ -3,3 +3,6 @@ cabal.sandbox.config
 .cabal-sandbox/*
 tmp/*
 .stack-work/*
+
+
+.#*

@@ -1,0 +1,173 @@
+name:                hgit
+version:             0.1.0.0
+license:             BSD3
+license-file:        LICENSE
+author:              Paul Kinsky
+maintainer:          pkinsky@gmail.com
+build-type:          Simple
+cabal-version:       >=1.10
+
+
+
+library
+  hs-source-dirs: src
+  exposed-modules:
+        Commands
+        Errors
+        FileIO
+        HGit.Diff
+        HGit.Diff.Types
+        HGit.Gen
+        HGit.Merge
+        HGit.Repo
+        HGit.Serialization
+        Merkle.Store
+        Merkle.Store.Deref
+        Merkle.Store.FileSystem
+        Merkle.Types
+        HGit.Types
+        HGit.Types.Common
+        HGit.Types.HGit
+        HGit.Types.RepoState
+        Util.HRecursionSchemes
+        Util.MyCompose
+        Util.These
+  -- other-modules: todo figure out what actually needs to be exposed vs not
+  --   HaskellStarter.Util
+  build-depends: base >=4.8
+               , aeson
+               , bytestring
+               , containers
+               , cryptonite
+               , directory
+               , hashable
+               , hedgehog
+               , mtl
+               , unordered-containers
+               , pretty
+               , optparse-applicative
+               , random
+               , recursion-schemes
+               , safe-exceptions
+               , servant
+               , singletons
+               , text
+               , transformers
+               , vector
+  ghc-options: -Wall -Werror -Wno-redundant-constraints
+
+  default-language:    Haskell2010
+  extensions: RankNTypes
+            , PolyKinds
+            , DeriveFunctor
+            , DeriveFoldable
+            , DeriveGeneric
+            , DeriveTraversable
+            , DataKinds
+            , DefaultSignatures
+            , EmptyCase
+            , ExistentialQuantification
+            , FlexibleContexts
+            , FlexibleInstances
+            , GADTs
+            , LambdaCase
+            , InstanceSigs
+            , KindSignatures
+            , NoStarIsType
+            , OverloadedStrings
+            , PolyKinds
+            , RankNTypes
+            , ScopedTypeVariables
+            , TupleSections
+            , TypeFamilies
+            , ScopedTypeVariables
+            , StandaloneDeriving
+            , TemplateHaskell
+            , TypeApplications
+            , TypeOperators
+            , UndecidableInstances
+
+
+-- configuration for Unit tests and properties
+test-suite tests
+  type:           exitcode-stdio-1.0
+  main-is:        Main.hs
+  hs-source-dirs: test
+  build-depends: base >= 4 && < 5
+               , aeson
+               , containers
+               , hedgehog
+               , hgit
+               , hspec
+               , singletons
+               , transformers
+  extensions: RankNTypes
+            , PolyKinds
+            , DeriveFunctor
+            , DeriveFoldable
+            , DeriveGeneric
+            , DeriveTraversable
+            , DataKinds
+            , DefaultSignatures
+            , EmptyCase
+            , ExistentialQuantification
+            , FlexibleContexts
+            , FlexibleInstances
+            , GADTs
+            , LambdaCase
+            , InstanceSigs
+            , KindSignatures
+            , NoStarIsType
+            , OverloadedStrings
+            , PolyKinds
+            , RankNTypes
+            , ScopedTypeVariables
+            , TupleSections
+            , TypeFamilies
+            , ScopedTypeVariables
+            , StandaloneDeriving
+            , TemplateHaskell
+            , TypeApplications
+            , TypeOperators
+            , UndecidableInstances
+
+
+
+
+-- configuration for an executable
+executable hgit
+  hs-source-dirs: app
+  main-is: Main.hs
+  build-depends: base >= 4 && < 5
+               , containers
+               , directory
+               , hgit
+  extensions: RankNTypes
+            , PolyKinds
+            , DeriveFunctor
+            , DeriveFoldable
+            , DeriveGeneric
+            , DeriveTraversable
+            , DataKinds
+            , DefaultSignatures
+            , EmptyCase
+            , ExistentialQuantification
+            , FlexibleContexts
+            , FlexibleInstances
+            , GADTs
+            , LambdaCase
+            , InstanceSigs
+            , KindSignatures
+            , NoStarIsType
+            , OverloadedStrings
+            , PolyKinds
+            , RankNTypes
+            , ScopedTypeVariables
+            , TupleSections
+            , TypeFamilies
+            , ScopedTypeVariables
+            , StandaloneDeriving
+            , TemplateHaskell
+            , TypeApplications
+            , TypeOperators
+            , UndecidableInstances

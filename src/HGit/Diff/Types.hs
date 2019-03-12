@@ -5,4 +5,4 @@ data Diff = FileModified
           | DirReplacedWithFile
           | EntityDeleted
           | EntityCreated
-  deriving (Show)
+  deriving (Eq, Ord, Show)
