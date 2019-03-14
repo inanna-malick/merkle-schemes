@@ -2,10 +2,10 @@ module Merkle.Store.Deref where
 
 --------------------------------------------
 import           Data.Functor.Compose
-import           Data.Singletons
 --------------------------------------------
 import           Util.MyCompose
 import           Util.HRecursionSchemes
+import           Merkle.Functors
 import           Merkle.Store
 import           Merkle.Types
 --------------------------------------------
@@ -14,29 +14,18 @@ import           Merkle.Types
 -- deref-ing hash pointers using a hash-addressed store. Allows for store returning multiple
 -- layers of tree structure in a single response (to enable future optimizations) via 'CoAttr'
 lazyDeref
-  :: forall i m p
+  :: forall m p
    . Monad m
   => HFunctor p
-  => SingI i
   => Store m p
-  -> Const HashPointer i
-  -> Term (LazyHashTagged m p) i
+  -> Hash :-> Term (Tagged Hash :++ Lazy m :++ p)
 lazyDeref store = futu alg
   where
-    alg :: CVCoalg (LazyHashTagged m p) (Const HashPointer)
-    alg p = Pair p . HC . Compose $ hfmap (cata helper) <$> sDeref store p
+    alg :: CVCoalg (Tagged Hash :++ Lazy m :++ p) Hash
+    alg p = HC . Tagged p . HC . Compose $ hfmap (cata helper) <$> sDeref store p
 
-    helper :: Alg (HashIndirect p) (Context (LazyHashTagged m p) (Const HashPointer))
-    helper (Pair p (HC (Compose Nothing))) = Hole p
-    helper (Pair p (HC (Compose (Just x)))) = Term $ Pair p $ (HC (Compose $ pure $ x))
-
-
-
-
-
-
-
-
-
-
-
+    helper :: Alg (Tagged Hash :++ Indirect :++ p)
+                  (Context (Tagged Hash :++ Lazy m :++ p) Hash)
+    helper (HC (Tagged p (HC (Compose Nothing)))) = Hole p
+    helper (HC (Tagged p (HC (Compose (Just x)))))
+      = Term . HC $ Tagged p $ (HC (Compose $ pure $ x))

@@ -8,7 +8,6 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 
-
 library
   hs-source-dirs: src
   exposed-modules:
@@ -21,10 +20,12 @@ library
         HGit.Merge
         HGit.Repo
         HGit.Serialization
+        Merkle.Functors
         Merkle.Store
         Merkle.Store.Deref
         Merkle.Store.FileSystem
         Merkle.Types
+        HGit.Hash
         HGit.Types
         HGit.Types.Common
         HGit.Types.HGit
@@ -36,12 +37,13 @@ library
   --   HaskellStarter.Util
   build-depends: base >=4.8
                , aeson
+               , base16-bytestring
                , bytestring
                , containers
                , cryptonite
                , directory
-               , hashable
                , hedgehog
+               , memory
                , mtl
                , unordered-containers
                , pretty

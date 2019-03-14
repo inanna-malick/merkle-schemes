@@ -8,6 +8,7 @@ import           Control.Monad.Trans.State.Lazy
 import qualified Data.List as List
 import           Data.Foldable (traverse_)
 import qualified Data.Functor.Compose as FC
+import           Data.Functor.Const
 import           Data.Singletons
 import qualified System.Directory as Dir
 --------------------------------------------

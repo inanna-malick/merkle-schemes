@@ -13,10 +13,11 @@ import           HGit.Repo
 import           HGit.Types
 import           HGit.Merge
 import           Util.HRecursionSchemes
-import           HGit.Serialization
+import           Merkle.Functors
 import           Merkle.Store
 import           Merkle.Store.Deref
 import           Merkle.Types
+import           Util.MyCompose
 --------------------------------------------
 
 main :: IO ()
@@ -64,9 +65,9 @@ main = parse >>= \case
     currentStateHash <- readTreeStrict base >>= uploadDeep store
 
     let commit = Commit msg currentStateHash (pure currentCommitHash)
-    hash <- sUploadShallow store commit
+    rootHash <- sUploadShallow store commit
     writeState $ repostate
-               { branches = M.insert (currentBranch repostate) hash $ branches repostate
+               { branches = M.insert (currentBranch repostate) rootHash $ branches repostate
                }
 
   -- todo: n-way branch merge once I figure out UX
@@ -95,9 +96,10 @@ main = parse >>= \case
           Left err -> fail $ "merge nonviable due to: " ++ show err
           Right root -> do
             let commit = Commit msg (pointer root) $ currentCommitHash :| [targetCommitHash]
-            hash <- sUploadShallow store commit
+            rootHash <- sUploadShallow store commit
             writeState $ repostate
-                       { branches = M.insert (currentBranch repostate) hash $ branches repostate
+                       { branches = M.insert (currentBranch repostate) rootHash
+                                  $ branches repostate
                        }
 
 
@@ -131,7 +133,7 @@ main = parse >>= \case
     status base repostate store = do
       currentCommit <- getBranch (currentBranch repostate) repostate >>= sDeref store
       strictCurrentState  <- readTreeStrict base
-      let currentState = makeLazy $ hashTag structuralHash strictCurrentState
+      let currentState = makeLazy $ hashTag strictCurrentState
       diffMerkleDirs (lazyDeref store $ commitRoot currentCommit) currentState
 
 
@@ -150,10 +152,9 @@ main = parse >>= \case
       writeTree base $ stripTags x
 
 
--- IDEA: use 'Pair (Const HashPointer) f' instead of (,) HashPointer :+ f
 commitRoot
-  :: forall x
-   . HGit (Term (HashTagged x)) 'CommitTag
-  -> Const HashPointer 'DirTag
-commitRoot (Commit _ (Term (Pair p _)) _) = p
+  :: forall f
+   . HGit (Term (Tagged Hash :++ f)) 'CommitTag
+  -> Hash 'DirTag
+commitRoot (Commit _ (Term (HC (Tagged p _))) _) = p
 commitRoot NullCommit        = emptyDirHash

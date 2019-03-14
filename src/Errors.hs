@@ -3,12 +3,12 @@ module Errors where
 --------------------------------------------
 import           Control.Exception (Exception)
 --------------------------------------------
-import           Merkle.Types (HashPointer)
+import           Merkle.Types (RawHash)
 import           HGit.Types   (BranchName)
 --------------------------------------------
 
 data MerkleTreeLookupError
-  = EntityNotFoundInStore HashPointer
+  = EntityNotFoundInStore RawHash
   deriving Show
 
 instance Exception MerkleTreeLookupError

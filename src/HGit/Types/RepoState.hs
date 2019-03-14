@@ -6,17 +6,15 @@ import           Data.Aeson
 import qualified Data.Map as M
 import           GHC.Generics
 --------------------------------------------
-import           HGit.Serialization
 import           HGit.Types.Common
 import           HGit.Types.HGit
-import           Merkle.Types (HashPointer(..))
-import           Util.HRecursionSchemes
+import           Merkle.Types (Hash)
 --------------------------------------------
 
 
 data RepoState
   = RepoState
-  { branches      :: M.Map BranchName (Const HashPointer 'CommitTag)
+  { branches      :: M.Map BranchName (Hash 'CommitTag)
   , currentBranch :: BranchName
   } deriving (Generic)
 
