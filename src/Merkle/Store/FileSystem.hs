@@ -1,19 +1,20 @@
+{-# LANGUAGE QuantifiedConstraints #-}
+
 module Merkle.Store.FileSystem where
 
 --------------------------------------------
-import qualified Data.Aeson as AE
-import qualified Data.Aeson.Internal as AE
-import qualified Data.Aeson.Parser as AE
-import qualified Data.Aeson.Types as AE
-import qualified Data.Aeson.Encoding as AE (encodingToLazyByteString)
 import           Control.Exception.Safe (MonadThrow, throw)
 import           Control.Monad.Except
+import qualified Data.Aeson as AE
+import qualified Data.Aeson.Encoding as AE (encodingToLazyByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import           Data.Functor.Compose
+import           Data.Functor.Const
 import           Data.Singletons
 --------------------------------------------
 import           Errors
+import           Merkle.Functors
 import           Merkle.Store
 import           Merkle.Types
 import           Util.HRecursionSchemes
@@ -22,44 +23,55 @@ import           Util.MyCompose
 
 -- | Filesystem backed store using the provided dir
 fsStore
-  :: forall m p
+  :: forall m f w
    . ( MonadIO m
      , MonadThrow m
-     , HFunctor p
+     , HFunctor f
+     , Hashable f
+     , forall i. SingI i => AE.ToJSON (w i)
+     , forall i. SingI i => AE.FromJSON (w i)
      )
-  => p (Const HashPointer) :-> Const HashPointer             -- hash structure
-  -> p (Const HashPointer) :-> Const AE.Value                -- encode json
-  -> NatM AE.Parser (Const AE.Value) (p (Const HashPointer)) -- decode json
-  -- the 'forall x' here enforces the invariant that exceptions can only contain empty structure!
-  -- EG: the null commit is often represented using the hash '0' or some other special value
-  -> (forall i x . SingI i => Const HashPointer i -> Maybe (p x i))
+  => Term (Tagged Hash :++ Indirect :++ f) :-> w
+  -> w :-> Term (Tagged Hash :++ Indirect :++ f)
+  -> (forall i x . SingI i => Hash i -> Maybe (f x i))
   -> FilePath
-  -> Store m p
-fsStore hash encode decode exceptions root
+  -> Store m f
+fsStore encode decode exceptions root
   = Store
   { sDeref = \p -> case exceptions p of
       Just exception -> pure exception
       Nothing -> handleDeref p
   , sUploadShallow = \x -> do
       let p = hash x
-          fn = unHashPointer $ getConst p
-      -- liftIO . putStrLn $ "upload thing that hashes to pointer " ++ show p ++ "to state store @ " ++ fn
-      liftIO . BL.writeFile (root ++ "/" ++ fn)
+          fakeDeep :: f Hash :-> f (Term (Tagged Hash :++ Indirect :++ f))
+          fakeDeep = hfmap f
+
+      liftIO . BL.writeFile (root ++ "/" ++ fn p)
              . AE.encodingToLazyByteString . AE.toEncoding
-             $ encode x
+             . encode . Term . HC . Tagged p
+             . HC . Compose . Just $ fakeDeep x
 
       pure p
   }
   where
+    f :: Hash :-> Term (Tagged Hash :++ Indirect :++ f)
+    f p = Term . HC . Tagged p . HC $ Compose Nothing
+
+    fn :: Hash i -> String
+    fn = show . hashToText . getConst
+
     handleDeref :: forall i
                  . SingI i
-                => Const HashPointer i
-                -> m $ p (Term (HashIndirect p)) i
-    handleDeref (Const p) = do
+                => Hash i
+                -> m $ f (Term (Tagged Hash :++ Indirect :++ f)) i
+    handleDeref p = do
       -- liftIO . putStrLn $ "attempt to deref " ++ show p ++ " via fs state store @ " ++ fn
-      contents <- liftIO $ B.readFile (root ++ "/" ++ unHashPointer p)
-      case (AE.eitherDecodeStrictWith AE.json' (AE.iparse decode . Const) contents) of
+      contents <- liftIO $ B.readFile (root ++ "/" ++ fn p)
+      case AE.eitherDecodeStrict contents of
         Left  e -> throw . DecodeError $ show e
-        Right x -> do
-          -- liftIO . putStrLn $ "got: " ++ (filter ('\\' /=) $ show contents)
-          pure $ hfmap (Term . flip Pair (HC $ Compose $ Nothing)) x
+        Right x -> case decode x of
+          Term (HC (Tagged p' (HC (Compose (Just x')))))
+            | p == p' -> pure x'
+            | otherwise -> throw . DecodeError $ "hash mismatch (data corruption? lmao idk, here be dragons)"
+          Term (HC (Tagged _ (HC (Compose Nothing)))) ->
+            throw . DecodeError $ "should always have first layer of structure substantiated"

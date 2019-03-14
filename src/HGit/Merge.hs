@@ -3,10 +3,11 @@ module HGit.Merge where
 --------------------------------------------
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Except
-import qualified Data.HashMap.Strict as Map
-import qualified Data.Functor.Compose as FC
+import qualified Data.Map.Strict as Map
+import           Data.Functor.Compose
 --------------------------------------------
 import           HGit.Types
+import           Merkle.Functors
 import           Merkle.Store
 import           Merkle.Store.Deref (lazyDeref)
 import           Merkle.Types
@@ -27,9 +28,9 @@ mergeMerkleDirs
    . Monad m
   => MonadIO m
   => Store m HGit
-  -> Const HashPointer 'DirTag
-  -> Const HashPointer 'DirTag
-  -> m $ Either MergeViolation $ Term (LazyHashTagged m HGit) 'DirTag
+  -> Hash 'DirTag
+  -> Hash 'DirTag
+  -> m $ Either MergeViolation $ Term (Tagged Hash :++ Lazy m :++  HGit) 'DirTag
 mergeMerkleDirs store p1 p2 =
   runExceptT $ mergeMerkleDirs' store (lazyDeref store p1) (lazyDeref store p2)
 
@@ -47,16 +48,16 @@ mergeMerkleDirs'
   => MonadIO m
   -- TODO: is this really needed? could upload in later phase, don't like upload even if partial failure
   => Store m HGit
-  -> Term (LazyHashTagged m HGit) 'DirTag
-  -> Term (LazyHashTagged m HGit) 'DirTag
-  -> ExceptT MergeViolation m $ Term (LazyHashTagged m HGit) 'DirTag
+  -> Term (Tagged Hash :++ Lazy m :++  HGit) 'DirTag
+  -> Term (Tagged Hash :++ Lazy m :++  HGit) 'DirTag
+  -> ExceptT MergeViolation m $ Term (Tagged Hash :++ Lazy m :++  HGit) 'DirTag
 mergeMerkleDirs' store = mergeDirs []
   where
     mergeDirs
       :: [PartialFilePath]
-      -> Term (LazyHashTagged m HGit) 'DirTag
-      -> Term (LazyHashTagged m HGit) 'DirTag
-      -> ExceptT MergeViolation m $ Term (LazyHashTagged m HGit) 'DirTag
+      -> Term (Tagged Hash :++ Lazy m :++  HGit) 'DirTag
+      -> Term (Tagged Hash :++ Lazy m :++  HGit) 'DirTag
+      -> ExceptT MergeViolation m $ Term (Tagged Hash :++ Lazy m :++  HGit) 'DirTag
     mergeDirs h dir1 dir2 = do
       if pointer dir1 == pointer dir2
           then pure dir1 -- if both pointers == then they're identical, either is fine for merge res
@@ -70,15 +71,15 @@ mergeMerkleDirs' store = mergeDirs []
             let dir = Dir entries
                 dir' = hfmap pointer dir
             p <- ExceptT $ Right <$> sUploadShallow store dir'
-            pure $ Term $ Pair p $ HC $ FC.Compose $ pure dir
+            pure $ Term . HC . Tagged p . HC $ Compose $ pure dir
 
     resolveMapDiff
       :: [PartialFilePath]
       -> ( PartialFilePath
-         , These (FileTreeEntity (Term (LazyHashTagged m HGit)))
-                 (FileTreeEntity (Term (LazyHashTagged m HGit)))
+         , These (FileTreeEntity (Term (Tagged Hash :++ Lazy m :++  HGit)))
+                 (FileTreeEntity (Term (Tagged Hash :++ Lazy m :++  HGit)))
          )
-      -> ExceptT MergeViolation m $ NamedFileTreeEntity (Term (LazyHashTagged m HGit))
+      -> ExceptT MergeViolation m $ NamedFileTreeEntity (Term (Tagged Hash :++ Lazy m :++  HGit))
     resolveMapDiff _
       (n, This x) = pure (n, x) -- non-conflicting change, keep
     resolveMapDiff h
@@ -91,9 +92,9 @@ mergeMerkleDirs' store = mergeDirs []
     compareDerefed
       :: [PartialFilePath]
       -> PartialFilePath
-      -> FileTreeEntity (Term (LazyHashTagged m HGit))
-      -> FileTreeEntity (Term (LazyHashTagged m HGit))
-      -> ExceptT MergeViolation m $ NamedFileTreeEntity (Term (LazyHashTagged m HGit))
+      -> FileTreeEntity (Term (Tagged Hash :++ Lazy m :++  HGit))
+      -> FileTreeEntity (Term (Tagged Hash :++ Lazy m :++  HGit))
+      -> ExceptT MergeViolation m $ NamedFileTreeEntity (Term (Tagged Hash :++ Lazy m :++  HGit))
     compareDerefed h path (DirEntity _) (FileEntity _)
       = throwE . MergeViolation $ h ++ [path]
     compareDerefed h path (FileEntity _) (DirEntity _)

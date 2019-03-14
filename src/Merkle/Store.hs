@@ -2,14 +2,16 @@ module Merkle.Store where
 
 --------------------------------------------
 import           Data.Kind (Type)
-import           Merkle.Types (HashPointer, HashIndirect)
+import           Merkle.Functors (Indirect)
+import           Merkle.Types (Hash)
+import           Util.MyCompose
 import           Util.HRecursionSchemes
 --------------------------------------------
 
 data Store m (f :: (k -> Type) -> k -> Type)
   = Store
-  { sDeref :: NatM m (Const HashPointer) (f (Term (HashIndirect f)))
-  , sUploadShallow :: AlgM m f (Const HashPointer)
+  { sDeref :: NatM m Hash (f (Term (Tagged Hash :++ Indirect :++ f)))
+  , sUploadShallow :: AlgM m f Hash
   }
 
 uploadDeep
@@ -17,5 +19,5 @@ uploadDeep
    . HTraversable f
   => Monad m
   => Store m f
-  -> NatM m (Term f) (Const HashPointer)
+  -> NatM m (Term f) Hash
 uploadDeep store = cataM (sUploadShallow store)

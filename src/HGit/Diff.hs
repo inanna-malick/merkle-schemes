@@ -6,11 +6,13 @@ module HGit.Diff (diffMerkleDirs) where
 --------------------------------------------
 import           Control.Monad (join)
 import           Control.Monad.IO.Class
-import qualified Data.HashMap.Strict as Map
+import qualified Data.Map.Strict as Map
 --------------------------------------------
 import           HGit.Diff.Types
 import           HGit.Types
+import           Merkle.Functors
 import           Merkle.Types
+import           Util.MyCompose
 import           Util.These (These(..), mapCompare)
 import           Util.HRecursionSchemes
 --------------------------------------------
@@ -24,15 +26,15 @@ diffMerkleDirs
   -- sequence actions in it to deref successive layers (because monad)
    . Monad m
   => MonadIO m
-  => Term (LazyHashTagged m HGit) 'DirTag
-  -> Term (LazyHashTagged m HGit) 'DirTag
+  => Term (Tagged Hash :++ Lazy m :++ HGit) 'DirTag
+  -> Term (Tagged Hash :++ Lazy m :++ HGit) 'DirTag
   -> m [([PartialFilePath], Diff)]
 diffMerkleDirs = compareDir []
   where
     compareDir
       :: [PartialFilePath]
-      -> Term (LazyHashTagged m HGit) 'DirTag
-      -> Term (LazyHashTagged m HGit) 'DirTag
+      -> Term (Tagged Hash :++ Lazy m :++ HGit) 'DirTag
+      -> Term (Tagged Hash :++ Lazy m :++ HGit) 'DirTag
       -- todo: writer w/ stack (?) so I can push/path segments to go with changes to tag diffs with loc...
       -> m [([PartialFilePath], Diff)]
     compareDir h dir1 dir2 =
@@ -48,8 +50,8 @@ diffMerkleDirs = compareDir []
     resolveMapDiff
       :: [PartialFilePath]
       -> ( PartialFilePath
-         , These (FileTreeEntity (Term (LazyHashTagged m HGit)))
-                 (FileTreeEntity (Term (LazyHashTagged m HGit)))
+         , These (FileTreeEntity (Term (Tagged Hash :++ Lazy m :++ HGit)))
+                 (FileTreeEntity (Term (Tagged Hash :++ Lazy m :++ HGit)))
          )
       -> m [([PartialFilePath], Diff)]
     resolveMapDiff h
@@ -65,8 +67,8 @@ diffMerkleDirs = compareDir []
     compareDerefed
       :: [PartialFilePath]
       -> PartialFilePath
-      -> FileTreeEntity (Term (LazyHashTagged m HGit))
-      -> FileTreeEntity (Term (LazyHashTagged m HGit))
+      -> FileTreeEntity (Term (Tagged Hash :++ Lazy m :++ HGit))
+      -> FileTreeEntity (Term (Tagged Hash :++ Lazy m :++ HGit))
       -> m [([PartialFilePath], Diff)]
     compareDerefed h path (DirEntity _) (FileEntity _)
       = pure [(h ++ [path], DirReplacedWithFile)]

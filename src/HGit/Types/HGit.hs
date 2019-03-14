@@ -1,13 +1,16 @@
 module HGit.Types.HGit where
 
 --------------------------------------------
+import           Data.ByteString (ByteString)
+import           Data.List (sortOn)
 import           Data.List.NonEmpty
 import           Data.Singletons.TH
+import           Control.Monad (join)
 --------------------------------------------
 import           HGit.Types.Common
 import           Util.HRecursionSchemes -- YOLO 420 SHINY AND CHROME
+import           Merkle.Types
 --------------------------------------------
-
 
 $(singletons [d|
   data HGitTag = BlobTag | DirTag | CommitTag
@@ -15,7 +18,9 @@ $(singletons [d|
 
 data HGit a i where
   -- file chunk bits
-  Blob :: FileChunk -> HGit a 'BlobTag
+  -- NOTE: using String instead of Bytestring to allow for easy examination of serialized files
+  --       (strings are representable in JSON, ByteStrings would need to be base64 encoded)
+  Blob :: String -> HGit a 'BlobTag
 
   -- dir and file bits
   Dir :: [NamedFileTreeEntity a]
@@ -27,6 +32,11 @@ data HGit a i where
          -> NonEmpty (a 'CommitTag) -- parent commits (at least one)
          -> HGit a 'CommitTag
   NullCommit :: HGit a 'CommitTag
+
+
+-- | sort dir here by file name, order is irrelevant
+canonicalOrdering :: [NamedFileTreeEntity a] -> [NamedFileTreeEntity a]
+canonicalOrdering = sortOn fst
 
 emptyDir :: forall x. HGit x 'DirTag
 emptyDir = Dir []
@@ -71,5 +81,31 @@ instance HTraversable HGit where
     pure $ Commit msg rc' ncs'
   hmapM _  NullCommit = pure NullCommit
 
--- test using type-tagged pointers via FC.Compose Const instead of (,)
--- type Test m = Term (Pair (FC.Compose (Const HashPointer)) (FC.Compose m :++ HGit))
+instance Hashable HGit where
+  hash :: HGit Hash :-> Hash
+  -- special cases
+  hash (Dir []) = emptyDirHash
+  hash (NullCommit) = nullCommitHash
+
+  -- file-type entities
+  hash (Blob x) = doHash ["blob", unpackString x]
+
+  -- non-empty dir-type entities
+  hash (Dir xs) = doHash $ ["dir" :: ByteString] ++ join (fmap hashNFTE $ canonicalOrdering xs)
+    where hashNFTE (name, f) = [unpackString name] ++ hashFTE f
+          hashFTE =
+            fte (\(chp :: Hash 'BlobTag) -> ["subfile", unpackHash chp])
+                (\(chp :: Hash 'DirTag)  -> ["subdir", unpackHash chp])
+
+  -- commit-type entities
+  hash (Commit msg root parents)
+    = doHash $
+        [ unpackString msg
+        , unpackHash root
+        ] ++ toList (fmap unpackHash parents)
+
+nullCommitHash :: Hash 'CommitTag
+nullCommitHash = doHash [mempty]
+
+emptyDirHash :: Hash 'DirTag
+emptyDirHash = doHash [mempty]

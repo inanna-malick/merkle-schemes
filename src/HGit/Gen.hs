@@ -6,18 +6,19 @@ import           Hedgehog (MonadGen)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 --------------------------------------------
+import           Merkle.Functors
 import           Merkle.Types
-import           HGit.Serialization
 import           HGit.Types
 import           Util.HRecursionSchemes
+import           Util.MyCompose
 --------------------------------------------
 
 -- | always substantiated, just for type purposes
-genIndTagged :: forall m . MonadGen m => NatM m Sing (Term (HashIndirect HGit))
+genIndTagged :: forall m . MonadGen m => NatM m Sing (Term (Tagged Hash :++ Indirect :++ HGit))
 genIndTagged = fmap makeIndirect <$> genTagged
 
-genTagged :: forall m . MonadGen m => NatM m Sing (Term (HashTagged HGit))
-genTagged = fmap (hashTag structuralHash) <$> gen
+genTagged :: forall m . MonadGen m => NatM m Sing (Term (Tagged Hash :++ HGit))
+genTagged = fmap hashTag <$> gen
 
 gen :: forall m . MonadGen m => NatM m Sing (Term HGit)
 gen = anaM alg

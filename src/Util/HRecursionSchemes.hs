@@ -7,11 +7,8 @@
 module Util.HRecursionSchemes where
 
 import           Control.Monad
-import qualified Data.Aeson as AE
-import qualified Data.Hashable as H
 import           Data.Singletons
--- import           Data.Functor.Const (Const)
-import qualified Data.Functor.Compose as FC
+import           Data.Functor.Compose
 import           Data.Kind (Type)
 
 type NatM m f g = forall i. SingI i => f i -> m (g i)
@@ -22,24 +19,11 @@ type f :=> a = forall (i :: k) . SingI i => f i -> a
 class HFunctor (h :: (k -> Type) -> k -> Type) where
     hfmap :: (f :-> g) -> h f :-> h g
 
-newtype K a h i = Const { getConst :: a}
+newtype K a h i = K { getK :: a}
   deriving (Eq, Ord, Show)
-type Const a = K a ()
 
-instance AE.ToJSON x => AE.ToJSON (Const x i) where
-  toJSON (Const x) = AE.toJSON x
-
-instance AE.FromJSON x => AE.FromJSON (Const x i) where
-  parseJSON v = Const <$> AE.parseJSON v
-
-instance H.Hashable x => H.Hashable (Const x i) where
-  hashWithSalt s (Const x) = H.hashWithSalt s x
-
-instance HFunctor (K x) where
-  hfmap _ (Const x) = Const x
-
-instance (Functor f) => HFunctor (FC.Compose f) where
-  hfmap f (FC.Compose xs) = FC.Compose (fmap f xs)
+instance (Functor f) => HFunctor (Compose f) where
+  hfmap f (Compose xs) = Compose (fmap f xs)
 
 -- note: just the bit I need for cataM/anaM
 class HTraversable t where
@@ -47,8 +31,8 @@ class HTraversable t where
           => (forall i . SingI i =>    f  i -> m (   g  i))
           -> (forall i . SingI i => (t f) i -> m ((t g) i))
 
-instance (Traversable f) => HTraversable (FC.Compose f) where
-  hmapM nat (FC.Compose xs) = FC.Compose <$> traverse nat xs
+instance (Traversable f) => HTraversable (Compose f) where
+  hmapM nat (Compose xs) = Compose <$> traverse nat xs
 
 data Cxt h f a i where
     Term ::  f (Cxt h f a) i -> Cxt h f a i
@@ -59,7 +43,7 @@ data NoHole
 
 type Context = Cxt Hole
 
-type Term f = Cxt NoHole f (Const ())
+type Term f = Cxt NoHole f (K () ())
 
 unTerm :: Term f t -> f (Term f) t
 unTerm (Term t) = t
@@ -111,11 +95,11 @@ futu coa = ana run . Hole
 
 -- | ETC:
 
--- todo new name - Tagged!
-data Pair f g h i = Pair { ptag :: (f i), pelem :: (g h i) }
+data Tagged f g i = Tagged { _tag :: (f i), _elem :: (g i) }
 
-instance HFunctor g => HFunctor (Pair f g) where
-    hfmap f (Pair x y) = Pair x (hfmap f y)
+instance HFunctor (Tagged x) where
+    hfmap f (Tagged x y) = Tagged x (f y)
 
-instance (HTraversable f) => HTraversable (Pair g f) where
-  hmapM nat (Pair f g) = Pair f <$> hmapM nat g
+instance HTraversable (Tagged x) where
+  hmapM nat (Tagged x y) = Tagged x <$> nat y
+

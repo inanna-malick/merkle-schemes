@@ -14,10 +14,9 @@ import qualified System.Directory as Dir
 import           Errors
 import qualified HGit.Serialization as Ser
 import           HGit.Types
-import           Merkle.Types (HashPointer)
+import           Merkle.Types (Hash)
 import           Merkle.Store
 import           Merkle.Store.FileSystem (fsStore)
-import           Util.HRecursionSchemes (Const)
 --------------------------------------------
 
 
@@ -44,14 +43,16 @@ mkStore
   :: MonadIO m
   => MonadThrow m
   => m (Store m HGit)
-mkStore = fsStore Ser.structuralHash Ser.sencode Ser.sdecode exceptions <$> hgitStore'
+mkStore = fsStore Ser.HashTaggedIndirectTerm
+                  Ser.unHashTaggedIndirectTerm
+                  exceptions <$> hgitStore'
   where
-    exceptions :: forall i x . SingI i => Const HashPointer i -> Maybe (HGit x i)
+    exceptions :: forall i x . SingI i => Hash i -> Maybe (HGit x i)
     exceptions x = case sing @i of
-      SCommitTag -> if x == Ser.nullCommitHash
+      SCommitTag -> if x == nullCommitHash
                  then Just NullCommit
                  else Nothing
-      SDirTag -> if x == Ser.emptyDirHash
+      SDirTag -> if x == emptyDirHash
                  then Just (Dir [])
                  else Nothing
       _ -> Nothing
@@ -61,7 +62,7 @@ getBranch
   :: MonadThrow m
   => BranchName
   -> RepoState
-  -> m (Const HashPointer 'CommitTag)
+  -> m (Hash 'CommitTag)
 getBranch b
   = maybe (throw $ BranchNotFound b) pure . M.lookup b . branches
 

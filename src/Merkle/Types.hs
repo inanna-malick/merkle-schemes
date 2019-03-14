@@ -1,102 +1,64 @@
 module Merkle.Types where
 
 --------------------------------------------
+import qualified Crypto.Hash as CH
+import qualified Crypto.Hash.Algorithms as CHA
 import qualified Data.Aeson as AE
-import           Data.Functor.Compose
-import qualified Data.Hashable as H
+import qualified Data.ByteArray as BA
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Base16 as B16
+import           Data.Functor.Const (Const(..))
+import           Data.Kind (Type)
+import           Data.Text (Text, unpack, pack)
+import           Data.Text.Encoding (encodeUtf8, decodeUtf8)
 --------------------------------------------
-import           Util.MyCompose
-import           Util.HRecursionSchemes
+import           Util.HRecursionSchemes (Alg)
 --------------------------------------------
 
-type HashTagged f = Pair (Const HashPointer) f
+class Hashable (f :: (k -> Type) -> k -> Type) where
+  -- flatten a single layer of structure where all
+  -- sub-layers are hash pointers down to a hash
+  hash :: Alg f Hash
 
-pointer :: forall f . Term (HashTagged f) :-> Const HashPointer
-pointer (Term (Pair p _)) = p
+-- | Type-tagged hash pointer
+type Hash = Const RawHash
 
--- | Remove hash annotations from some HashTagged structure
-stripTags :: HFunctor f => Term (HashTagged f) :-> Term f
-stripTags = cata (Term . pelem)
-
--- | Flatten a HashTagged structure
-flatten
-  :: HFunctor f
-  => f (Term (HashTagged f)) :-> f (Const HashPointer)
-flatten = hfmap pointer
-
--- | Annotate each layer of some structure with its hash
-hashTag
-  :: HFunctor f
-  => HashFunction f
-  -> Term f :-> Term (HashTagged f)
-hashTag hf = cata (\x -> Term $ Pair (hf $ flatten x) x)
-
-type HashIndirect f = HashTagged (Compose Maybe :++ f)
-
--- | Make some fully substantiated hash tagged structure 'indirect'
-makeIndirect
-  :: HFunctor f
-  => Term (HashTagged f) :-> Term (HashIndirect f)
-makeIndirect = cata (\(Pair p e) -> Term $ Pair p $ HC $ Compose $ Just e)
-
-type LazyHashTagged m f = HashTagged (Compose m :++ f)
-
--- | Make some fully substantiated hash tagged structure 'indirect'
-makeLazy
-  :: HFunctor f
-  => Monad m
-  => Term (HashTagged f) :-> Term (LazyHashTagged m f)
-makeLazy = cata (\(Pair p e) -> Term $ Pair p $ HC $ Compose $ pure e)
-
-
--- | Fully consumes potentially-infinite effectful stream and may not terminate
-makeStrict
-  :: forall m p
-   . HTraversable p
-  => Monad m
-  => NatM m (Term (LazyHashTagged m p)) (Term (HashTagged p))
-makeStrict = anaM alg
-  where
-    alg :: CoalgM m (HashTagged p) (Term (LazyHashTagged m p))
-    alg (Term (Pair p (HC (Compose e)))) = Pair p <$> e
-
-derefLayer
-  :: forall f m
-   . NatM m (Term (LazyHashTagged m f))
-            (f (Term (LazyHashTagged m f)))
-derefLayer (Term (Pair _ (HC (Compose m)))) = m
-
-
-type HashFunction f = f (Const HashPointer) :-> Const HashPointer
-
--- | Hash pointer (points to value from which hash was derived),
-newtype HashPointer = HashPointer { unHashPointer :: String }
+-- | Hash pointer (points to value from which hash was derived)
+-- , digests tagged with hash alg (blake2b_256) at type level
+newtype RawHash = RawHash { unRawHash :: CH.Digest CHA.Blake2b_256 }
   deriving (Eq, Ord)
 
-instance Show HashPointer where
-  show (HashPointer x) = "#[" ++ x ++ "]"
+hashToText :: RawHash -> Text
+hashToText = decodeUtf8 . B16.encode . BA.pack . BA.unpack . unRawHash
 
-instance H.Hashable HashPointer where
-  hashWithSalt i (HashPointer a) = i `H.hashWithSalt` (H.hash a)
-
-instance AE.ToJSON HashPointer where
-  toJSON (HashPointer x) = AE.toJSON x
-
-instance AE.FromJSON HashPointer where
-  parseJSON v = HashPointer <$> AE.parseJSON v
-
--- one-way function
--- (because I'm lazy and don't want or need to write a parser, no fundamental reason)
--- NICE COMPACT STRING REPR FOR CONVENIENCE
-mkHashPointer :: Int -> HashPointer
-mkHashPointer p = HashPointer $ prefix p ++ f (abs p)
+textToHash :: Text -> Maybe RawHash
+textToHash = fmap RawHash . f . B16.decode . encodeUtf8
   where
-    prefix n | n > 0     = "x"
-             | n < 0     = "y"
-             | otherwise = "z"
-    chars = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9']
-    base = length chars
+    f (x, remainder)
+      -- no remaining unparseable bytes, sucess (note, 2x failure paths, todo: better logging)
+      | remainder == B.empty = CH.digestFromByteString x
+      | otherwise = Nothing
 
-    f n | n == 0 = ""
-        | n < 0 = f $ (-1) * n -- no loss of info, handled via prefix
-        | otherwise = chars !! (n `rem` base) : f (n `div` base)
+instance Show RawHash where
+  show x = "#[" ++ unpack (hashToText x) ++ "]"
+
+instance AE.ToJSON RawHash where
+  toJSON = AE.String . hashToText
+
+instance AE.FromJSON RawHash where
+  parseJSON =
+    AE.withText "RawHash"
+      (maybe (fail "parsing failed") pure . textToHash)
+
+
+unpackString :: String -> ByteString
+unpackString = encodeUtf8 . pack
+
+unpackHash :: Hash i -> ByteString
+unpackHash = BA.pack . BA.unpack . unRawHash . getConst
+
+-- | do actual hash computation type stuff. blake2b!
+doHash :: [ByteString] -> Hash i
+doHash = Const . RawHash . CH.hashFinalize
+       . CH.hashUpdates (CH.hashInit :: CH.Context CHA.Blake2b_256)
