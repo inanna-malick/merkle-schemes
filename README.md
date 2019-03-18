@@ -248,5 +248,5 @@ As expected, this merge fails - the algorithm has no way of knowing which charac
 
 DISCLAIMERS:
 
-disclaimer: all hashes shown below are the result of some janky non-cryptographic hash function being converted into `[a..z,A..Z,0..9]`. I will eventually move to `blake2` or some other modern cryptographic hash function. Pls no bully.
+disclaimer: all hashes shown below are the result of some janky non-cryptographic hash function being converted into `[a..z,A..Z,0..9]`. This project now uses `blake2` digests encoded as strings using base16
 disclaimer: running this example will likely result in different hashes, as the hashes are derived from the serialized json structure of hgit objects which continues to change.
