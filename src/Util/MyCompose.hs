@@ -34,3 +34,16 @@ annotate alg = cata alg'
   where
     alg' :: Alg f (Term (Tagged x :++ f))
     alg' f = Term . HC $ Tagged (alg $ hfmap (_tag . getHC . unTerm) f) f
+
+(<:>) :: (HFunctor f, HFunctor g)
+      => (f b :-> c)
+      -> (g a :-> b)
+      -> ((f :++ g) a :-> c)
+(<:>) f g = f . hfmap g . getHC
+
+
+(<!>) :: (HFunctor f, HFunctor g)
+      => (a :-> f b)
+      -> (b :-> g c)
+      -> (a :-> (f :++ g) c)
+(<!>) f g a =  HC . hfmap g $ f a
