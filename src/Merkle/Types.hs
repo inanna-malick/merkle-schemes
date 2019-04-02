@@ -12,14 +12,18 @@ import           Data.Functor.Const (Const(..))
 import           Data.Kind (Type)
 import           Data.Text (Text, unpack, pack)
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import           Servant.API
 --------------------------------------------
-import           Util.HRecursionSchemes (Alg)
+import           Util.RecursionSchemes (Algebra)
 --------------------------------------------
 
-class Hashable (f :: (k -> Type) -> k -> Type) where
+class Hashable (f :: Type -> Type) where
   -- flatten a single layer of structure where all
   -- sub-layers are hash pointers down to a hash
-  hash :: Alg f Hash
+  hash :: Algebra f (Hash f)
+
+emptyHash :: forall x. Hash x
+emptyHash = doHash [mempty]
 
 -- | Type-tagged hash pointer
 type Hash = Const RawHash
@@ -40,7 +44,16 @@ textToHash = fmap RawHash . f . B16.decode . encodeUtf8
       | remainder == B.empty = CH.digestFromByteString x
       | otherwise = Nothing
 
+-- no instance is defined for ToHttpApiData a => Const a x
+instance ToHttpApiData (Const RawHash x) where
+  toUrlPiece = hashToText . getConst
+
+-- no instance is defined for FromHttpApiData a => Const a x
+instance FromHttpApiData (Const RawHash x) where
+  parseUrlPiece = maybe (Left "unable to parse hash as base16") (Right . Const) . textToHash
+
 instance Show RawHash where
+  -- only take 5, for diag.
   show x = "#[" ++ unpack (hashToText x) ++ "]"
 
 instance AE.ToJSON RawHash where
@@ -51,11 +64,18 @@ instance AE.FromJSON RawHash where
     AE.withText "RawHash"
       (maybe (fail "parsing failed") pure . textToHash)
 
+newtype HashTerm f = HashTerm { unHashTerm :: f (Hash f)}
+
+instance AE.ToJSON1 f => AE.ToJSON (HashTerm f) where
+  toJSON = AE.liftToJSON AE.toJSON AE.toJSONList . unHashTerm
+
+instance AE.FromJSON1 f => AE.FromJSON (HashTerm f) where
+  parseJSON = fmap HashTerm . AE.liftParseJSON AE.parseJSON AE.parseJSONList
 
 unpackString :: String -> ByteString
 unpackString = encodeUtf8 . pack
 
-unpackHash :: Hash i -> ByteString
+unpackHash :: Hash x -> ByteString
 unpackHash = BA.pack . BA.unpack . unRawHash . getConst
 
 -- | do actual hash computation type stuff. blake2b!
