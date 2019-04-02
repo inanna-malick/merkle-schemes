@@ -1,79 +1,132 @@
 module Main where
 
+import           Control.Exception.Safe                (throw, bracket)
 
-import Data.Singletons
 import Data.Functor.Compose
 import Control.Monad.IO.Class
-import qualified Data.Aeson as AE
 import Test.Hspec
-import HGit.Serialization
 import HGit.Diff
 import HGit.Merge
 import HGit.Diff.Types
-import HGit.Gen
 import HGit.Types.HGit
 import Util.MyCompose
-import Util.HRecursionSchemes
+import Util.RecursionSchemes
 import Merkle.Functors
 import Merkle.Store
+import Merkle.Store.Network
+import Merkle.Store.FileSystem
+import Merkle.Store.Deref
 import Merkle.Types
 import Data.Map (Map)
 import qualified Data.Map as M
-import           Control.Monad.Trans.State.Lazy (StateT, gets, get, put, runStateT)
+import           Control.Monad.Trans.State.Lazy (StateT, gets, runStateT, modify)
 import           Control.Monad.Trans.Except (runExceptT)
 
 import           Hedgehog
+import Control.Monad.Fail (MonadFail)
 
+import System.IO.Temp
+import System.IO
+
+import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Range as Range
+import qualified Control.Concurrent               as C
+import qualified Network.Wai.Handler.Warp         as Warp
+import           Servant.Client (mkClientEnv, runClientM, Scheme(..), BaseUrl(..))
+
+import Network.HTTP.Client (newManager, defaultManagerSettings)
+
+import Data.Aeson.Orphans ()
+
+
+-- TODO: split merkle and hgit tests?
 
 main :: IO ()
 main = do
-  let dir xs = Term $ Dir xs
+  hSetBuffering stdout NoBuffering
+
+  let ffail :: MonadFail m => Hash x -> Fix (HashAnnotated x `Compose` m `Compose` x)
+      ffail h = Fix $ Compose (h, Compose $ fail "Boom!")
+      dir :: Applicative m
+          => [NamedFileTreeEntity (Hash Blob) (Fix $ HashAnnotated HashableDir `Compose` m `Compose` HashableDir)]
+          -> Fix (HashAnnotated (Dir (Hash Blob)) `Compose` m `Compose` Dir (Hash Blob))
+      dir xs =
+        let d = Dir xs
+            h = hash $ fmap htPointer d
+         in Fix $ Compose (h, Compose $ pure d)
       dir' n xs = (n,) . DirEntity $ dir xs
-      -- TODO/IDEA: store commit messages as blobs!
-      blob body = Term $ Blob body -- todo delete blobtree
-      file n  = (n,) . FileEntity . blob
-      commit msg r ps  = Term $ Commit msg r ps
-      liftHD :: Term HGit :-> Term (Tagged Hash :++ Indirect :++ HGit)
-      liftHD = makeIndirect . hashTag
+      blobHash body = hash $ Chunk body emptyHash
+      file n = (n,) . FileEntity . blobHash
 
-  let roundtrip :: forall i . SingI i => HashTaggedIndirectTerm i -> Either String (HashTaggedIndirectTerm i)
-      roundtrip = AE.eitherDecode . AE.encode
-
-
-  -- let x' = liftHD $ dir [file "fname" "fblob"]
-  -- let x = HashTaggedIndirectTerm $ liftHD' $ x'
-
-  let propRoundtrip s =
+  -- generate a flat structure
+  let propRoundtripShallow s =
         property $ do
-          dt <- forAll $ (HashTaggedIndirectTerm <$> genIndTagged s)
-          -- liftIO $ print $ AE.encode dt
-          roundtrip dt === Right dt
+          x <- forAll genDir
+          h <- sUploadShallow s x
+          r <- sDeref' s h
+          (fmap htPointer r) === x
 
-  propres <- checkParallel $ Group "Encoding.RoundTrip" [
-        ("dir tag round trip", propRoundtrip SDirTag),
-        ("file tag round trip", propRoundtrip SBlobTag),
-        ("commit tag round trip", propRoundtrip SCommitTag)
-      ]
+      genHash = do
+        seed <- Gen.string  (Range.singleton 100) Gen.alphaNum
+        pure $ doHash [unpackString seed]
 
-  putStrLn $ "hedgehog prop res: " ++ show propres
+      genNamedFileEntity = do
+        n <- Gen.string (Range.singleton 10) Gen.alphaNum
+        (n,) <$> Gen.choice [fmap DirEntity genHash, fmap FileEntity genHash]
+
+      genDir :: Gen (HashableDir (Hash HashableDir))
+      genDir = Dir <$> Gen.list (Range.constant 1 10) genNamedFileEntity
+
+  -- generate a nested structure -> deep upload -> strict download -> check (==)
+  let propRoundtripDeep s =
+        property $ do
+          x <- forAll gen
+          h <- uploadDeep s x
+          r <- strictDeref $ lazyDeref' s h
+          stripTags r === x
+
+      gen :: MonadGen m => m (Fix HashableDir)
+      gen = anaM genDirR 5
+
+      genDirR :: MonadGen m => Int -> m (HashableDir Int)
+      genDirR n = Dir <$> Gen.list (Range.constant 1 3) (Gen.choice [genFile, genDir' n])
+
+      genDir' :: MonadGen m => Int -> m (NamedFileTreeEntity (Hash Blob) Int)
+      genDir' n = if n <= 0
+        then genFile
+        else do
+          name <- Gen.string  (Range.singleton 10) Gen.alphaNum
+          pure (name, DirEntity $ n - 1)
+
+      genFile :: MonadGen m => m (NamedFileTreeEntity (Hash Blob) Int)
+      genFile = do
+        name <- Gen.string (Range.singleton 10) Gen.alphaNum
+        body <- Gen.string (Range.singleton 100) Gen.alphaNum
+        pure $ file name body -- file w/ hash of body
+
+  -- use shared hash-addressed store for all tests - if hash == content ==, so safe. Merkle!
+  propres <- withSystemTempDirectory "proptest" $ \ fspath ->
+    withSystemTempDirectory "proptest" $ \ netpath -> do
+      let port = 8081 -- todo random?
+      manager <- newManager defaultManagerSettings
+      let env = mkClientEnv manager (BaseUrl Http "localhost" port "")
+      let netStore' :: Store (PropertyT IO) HashableDir
+          netStore' = liftStore (\mx -> liftIO (runClientM mx env) >>= either throw pure) netStore
+      bracket (liftIO . C.forkIO . Warp.run port . app "dir" $ (fsStore netpath :: Store IO HashableDir))
+        C.killThread $ \_ -> do
+          checkSequential $ Group "Store.RoundTrip"
+            [ ("fs: flat Dir merkle tree round trip via store", propRoundtripShallow $ fsStore fspath)
+            , ("fs: deep Dir merkle tree round trip via store", propRoundtripDeep $ fsStore fspath)
+            , ("network: flat Dir merkle tree round trip via store", propRoundtripShallow netStore')
+            , ("network: deep Dir merkle tree round trip via store", propRoundtripDeep netStore')
+            ]
+
+  print propres
 
   hspec $ do
-    describe "round trip (HashTaggedIndirectTerm)" $ do
-      it "commit encoding" $ do
-        let r1 = dir [file "fname" "fblob", dir' "subdir" [file "f1" "foo", file "f2" "bar"]]
-            r2 = dir [("base", DirEntity r1), dir' "tmp" [("bkup", DirEntity r1)]]
-            c = commit "commit 2" r1 (pure $ commit "c1" r2 $ pure $ Term NullCommit)
-            hidt = HashTaggedIndirectTerm $ liftHD c
-
-        -- print $ AE.encode hidt
-
-        roundtrip hidt `shouldBe` Right hidt
-
-    -- todo tests that confirm laziness via boobytrapped branches (via error on eval)
     describe "diff" $ do
-      let lift = makeLazy . hashTag
-          diffTest r1 r2 expected = do
-            diffRes <- diffMerkleDirs (lift r1) (lift r2)
+      let diffTest r1 r2 expected = do
+            diffRes <- diffMerkleDirs r1 r2
             diffRes `shouldBe` expected
 
       it "modify file" $ do
@@ -96,12 +149,58 @@ main = do
             r2 = dir [dir' "foo" [file "bar" "bar.body"], file "baz" "baz.body"]
         diffTest r1 r2 [(["baz"], DirReplacedWithFile), (["foo"], FileReplacedWithDir)]
 
+      it "diff lazily without descending into non-conflicting dir branches changes" $ do
+        let shared :: forall m. Monad m => Fix (HashAnnotated HashableDir `Compose` m `Compose` HashableDir)
+            shared = dir [ dir' "baz" [ file "bar" "bar.body"
+                         ]
+                         , file "bar" "bar.body"
+                         ]
+
+            sharedPointer = htPointer (shared @ Maybe) -- just needs some type param... FIXME
+            -- ffail is used to booby-trap branches of the lazy merkle tree which shouldn't be derefed
+            r1 = dir [ ("shared", DirEntity . ffail $ sharedPointer)
+                     , file "foo" "foo.body"]
+            r2 = dir [ ("shared", DirEntity . ffail $ sharedPointer)
+                     , file "baz" "baz.body"]
+
+        diffTest r1 r2 [(["foo"], EntityDeleted), (["baz"], EntityCreated)]
 
     describe "merge" $ do
-      let lift = makeLazy . hashTag
+      it "merge lazily without descending into non-conflicting dir branches changes" $ do
+        let shared :: forall m. Monad m => Fix (HashAnnotated HashableDir `Compose` m `Compose` HashableDir)
+            shared = dir [ dir' "baz" [ file "bar" "bar.body"
+                         ]
+                         , file "bar" "bar.body"
+                         ]
+
+            sharedPointer = htPointer (shared @ Maybe) -- just needs some type param... FIXME
+            -- ffail is used to booby-trap branches of the lazy merkle tree which shouldn't be derefed
+            r1 = dir [ ("shared", DirEntity . ffail $ sharedPointer)
+                     , file "foo" "foo.body"]
+            r2 = dir [ ("shared", DirEntity . ffail $ sharedPointer)
+                     , file "baz" "baz.body"]
+
+            expected :: forall m. Monad m => Fix (HashAnnotated HashableDir `Compose` m `Compose` HashableDir)
+            expected = dir [ file "baz" "baz.body"
+                           , file "foo" "foo.body"
+                           , ("shared", DirEntity $ shared)
+                           ]
+
+        (strictRes, _) <- flip runStateT (M.empty :: SSMap HashableDir) $ do
+          -- needs to be derefed from store, so upload
+          _ <- strictDeref shared >>= uploadDeep testStore . stripTags
+          Right res <- runExceptT $ mergeMerkleDirs' testStore r1 r2
+
+          -- res still has poisoned branches, so deref from pointer (b/c store has shared structure)
+          strictDeref $ lazyDeref' testStore $ htPointer res
+
+        strictExpected <- strictDeref expected -- janky.. should have lazy & strict branches
+
+        strictRes `shouldBe` strictExpected
 
       it "merge with safely overlapping changes" $ do
         let r1 = dir [ dir' "baz" [ file "bar" "bar.body"
+
                                   ]
                      , file "bar" "bar.body"
                      ]
@@ -110,82 +209,47 @@ main = do
                      , file "bar" "bar.body"
                      ]
 
-            expected = dir [ dir' "baz" [ file "bar" "bar.body"
+            expected = dir [ file "bar" "bar.body"
+                           , dir' "baz" [ file "bar" "bar.body"
                                         , file "foo" "foo.body"
                                         ]
-                           , file "bar" "bar.body"
                            ]
 
-        (strictRes, _) <- flip runStateT emptyStore $ do
-          Right res <- runExceptT $ mergeMerkleDirs' testStore (lift r1) (lift r2)
-          makeStrict res
+        (strictRes, _) <- flip runStateT M.empty $ do
+          Right res <- runExceptT $ mergeMerkleDirs' testStore r1 r2
+          strictDeref res
 
-        (HashTaggedNT strictRes) `shouldBe` (HashTaggedNT $ hashTag expected)
+        strictExpected <- strictDeref expected -- janky.. should have lazy & strict branches
+        strictRes `shouldBe` strictExpected
 
       it "merge with file-level conflict" $ do
         let r1 = dir [dir' "baz" [file "bar" "bar.body.b"]]
             r2 = dir [dir' "baz" [file "bar" "bar.body.a"]]
 
-        (Left err, _storeState) <- flip runStateT emptyStore
-                                 . runExceptT $ mergeMerkleDirs' testStore (lift r1) (lift r2)
+        (Left err, _storeState) <- flip runStateT M.empty
+                                 . runExceptT $ mergeMerkleDirs' testStore r1 r2
 
         err `shouldBe` MergeViolation ["baz", "bar"]
 
-type SSMap i = Map (Hash i) (HGit Hash i)
-
-data StoreState
-  = StoreState
-  { ssCommits :: SSMap 'CommitTag
-  , ssDirs    :: SSMap 'DirTag
-  , ssBlobs   :: SSMap 'BlobTag
-  }
-
-emptyStore :: StoreState
-emptyStore = StoreState M.empty M.empty M.empty
+type SSMap f = Map (Hash f) (f (Hash f))
 
 -- TODO: move to Merkle.Store.Test
--- todo: bake 'Maybe' into lookup fn, stores should only have control over, eg, decode parse fail error type
-testStore :: forall m . MonadIO m => Store (StateT StoreState m) HGit
+testStore
+  :: forall m f
+   . ( Hashable f
+     , Functor f
+     , MonadIO m
+     )
+  => Store (StateT (SSMap f) m) f
 testStore = Store
-  { sDeref = handleDeref
+  { sDeref = \p -> gets (lookup' p)
   , sUploadShallow = \x -> do
-      case x of
-        NullCommit -> do
           let p = hash x
-          state <- get
-          let state' = state { ssCommits = M.insert p x (ssCommits state) }
-          put state'
-          pure p
-        (Commit _ _ _) -> do
-          let p = hash x
-          state <- get
-          let state' = state { ssCommits = M.insert p x (ssCommits state) }
-          put state'
-          pure p
-        (Dir _) ->  do
-          let p = hash x
-          state <- get
-          let state' = state { ssDirs = M.insert p x (ssDirs state) }
-          put state'
-          pure p
-        (Blob _) -> do
-          let p = hash x
-          state <- get
-          let state' = state { ssBlobs = M.insert p x (ssBlobs state) }
-          put state'
+          modify (M.insert p x)
           pure p
   }
   where
-    lookup' :: forall i . SingI i => Hash i -> SSMap i
-            -> StateT StoreState m $ HGit (Term (Tagged Hash :++ Indirect :++ HGit)) i
-    lookup' p m = maybe (fail "key not found")
-                        (pure . hfmap (Term . HC . flip Tagged (HC $ Compose $ Nothing)))
-                $ M.lookup p m
-    handleDeref :: forall i
-                 . SingI i
-                => Hash i
-                -> StateT StoreState m $ HGit (Term (Tagged Hash :++ Indirect :++ HGit)) i
-    handleDeref p = case sing @i of
-        SCommitTag -> gets ssCommits >>= lookup' p
-        SBlobTag   -> gets ssBlobs   >>= lookup' p
-        SDirTag    -> gets ssDirs    >>= lookup' p
+    lookup' :: Hash f -> SSMap f -> Maybe (DerefRes f)
+    lookup' p h =
+      let lr = M.lookup p h
+       in fmap (fmap (Fix . Compose . (, Compose $ Nothing))) lr

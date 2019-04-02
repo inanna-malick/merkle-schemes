@@ -4,19 +4,19 @@ module Errors where
 import           Control.Exception (Exception)
 --------------------------------------------
 import           Merkle.Types (RawHash)
-import           HGit.Types   (BranchName)
+import           HGit.Types.HGit (BranchName)
 --------------------------------------------
 
-data MerkleTreeLookupError
-  = EntityNotFoundInStore RawHash
+data LookupError
+  = LookupError RawHash
   deriving Show
 
-instance Exception MerkleTreeLookupError
-
+instance Exception LookupError
 
 data RepoStateError
   = DecodeError String
   | BranchNotFound BranchName
+  | RemoteNotFound
   deriving Show
 
 instance Exception RepoStateError

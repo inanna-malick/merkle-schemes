@@ -1,111 +1,130 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module HGit.Types.HGit where
 
 --------------------------------------------
+import qualified Data.Aeson as AE
 import           Data.ByteString (ByteString)
+import           Data.Eq.Deriving
 import           Data.List (sortOn)
-import           Data.List.NonEmpty
-import           Data.Singletons.TH
+import           Data.List.NonEmpty (NonEmpty, toList)
 import           Control.Monad (join)
+import           GHC.Generics
+import           Text.Show.Deriving
 --------------------------------------------
-import           HGit.Types.Common
-import           Util.HRecursionSchemes -- YOLO 420 SHINY AND CHROME
 import           Merkle.Types
+import           Util.RecursionSchemes
 --------------------------------------------
+import Data.Bifunctor.TH
+import Data.Bitraversable (Bitraversable(..))
 
-$(singletons [d|
-  data HGitTag = BlobTag | DirTag | CommitTag
- |])
 
-data HGit a i where
-  -- file chunk bits
+
+type PartialFilePath = String
+type BranchName      = String
+type CommitMessage   = String
+
+
+data Blob a
+  = Chunk String a
+  | Empty
   -- NOTE: using String instead of Bytestring to allow for easy examination of serialized files
-  --       (strings are representable in JSON, ByteStrings would need to be base64 encoded)
-  Blob :: String -> HGit a 'BlobTag
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic1)
 
-  -- dir and file bits
-  Dir :: [NamedFileTreeEntity a]
-      -> HGit a 'DirTag
-
-  -- commits
-  Commit :: CommitMessage           -- todo: commit message as blob!
-         -> a 'DirTag               -- root directory (itself unnamed)
-         -> NonEmpty (a 'CommitTag) -- parent commits (at least one)
-         -> HGit a 'CommitTag
-  NullCommit :: HGit a 'CommitTag
+instance AE.ToJSON1 Blob
+instance AE.FromJSON1 Blob
 
 
--- | sort dir here by file name, order is irrelevant
-canonicalOrdering :: [NamedFileTreeEntity a] -> [NamedFileTreeEntity a]
-canonicalOrdering = sortOn fst
+data FileTreeEntity a b
+  = FileEntity a -- file type
+  | DirEntity  b -- continued directory structure type
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic1)
 
-emptyDir :: forall x. HGit x 'DirTag
-emptyDir = Dir []
+$(deriveBifoldable    ''FileTreeEntity)
+$(deriveBifunctor     ''FileTreeEntity)
+$(deriveBitraversable ''FileTreeEntity)
 
-dirEntries
-  :: HGit x 'DirTag
-  -> [NamedFileTreeEntity x]
-dirEntries (Dir ns) = ns
 
-data FileTreeEntity f
-  = FileEntity (f 'BlobTag) -- a file
-  | DirEntity  (f 'DirTag)       -- more directory structure
+$(deriveShow1 ''FileTreeEntity)
+$(deriveShow2 ''FileTreeEntity)
+$(deriveEq2   ''FileTreeEntity)
+$(deriveEq1   ''FileTreeEntity)
 
-fte :: (f 'BlobTag -> a)
-    -> (f 'DirTag       -> a)
-    -> FileTreeEntity f
-    -> a
-fte f _ (FileEntity x) = f x
-fte _ g (DirEntity  x) = g x
+instance AE.ToJSON1 (FileTreeEntity (Hash (Blob)))
+instance AE.FromJSON1 (FileTreeEntity (Hash (Blob)))
 
-type NamedFileTreeEntity f
+type NamedFileTreeEntity a b
   = ( PartialFilePath -- name of this directory entry (files and dirs have same name rules)
-    , FileTreeEntity f
+    , FileTreeEntity a b
     )
 
-instance HFunctor HGit where
-  hfmap _ (Blob fc)        = Blob fc
-  hfmap f (Dir dcs)        = Dir $ fmap (fmap (fte (FileEntity . f) (DirEntity . f))) dcs
-  hfmap f (Commit n rc nc) = Commit n (f rc) (fmap f nc)
-  hfmap _  NullCommit      = NullCommit
+data Dir a b = Dir { dirEntries :: [NamedFileTreeEntity a b] }
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic1)
 
-instance HTraversable HGit where
-  hmapM _ (Blob fc) = pure $ Blob fc
-  hmapM nat (Dir dcs) = do
-    let f (n, DirEntity dir)   = fmap ((n,) . DirEntity)  $ nat dir
-        f (n, FileEntity file) = fmap ((n,) . FileEntity) $ nat file
-    dcs' <- traverse f dcs
-    pure $ Dir dcs'
-  hmapM nat (Commit msg rc ncs) = do
-    rc' <- nat rc
-    ncs' <- traverse nat ncs
-    pure $ Commit msg rc' ncs'
-  hmapM _  NullCommit = pure NullCommit
+type HashableDir = Dir (Hash Blob)
 
-instance Hashable HGit where
-  hash :: HGit Hash :-> Hash
-  -- special cases
-  hash (Dir []) = emptyDirHash
-  hash (NullCommit) = nullCommitHash
+$(deriveBifoldable    ''Dir)
+$(deriveBifunctor     ''Dir)
+$(deriveBitraversable ''Dir)
 
+$(deriveShow1 ''Dir)
+$(deriveShow2 ''Dir)
+$(deriveEq2   ''Dir)
+$(deriveEq1   ''Dir)
+
+instance AE.ToJSON1 (Dir (Hash (Blob)))
+instance AE.FromJSON1 (Dir (Hash (Blob)))
+
+
+data Commit a b = NullCommit | Commit String a (NonEmpty b)
+  deriving  (Eq, Ord, Functor, Foldable, Traversable, Generic1)
+
+$(deriveBifoldable    ''Commit)
+$(deriveBifunctor     ''Commit)
+$(deriveBitraversable ''Commit)
+
+$(deriveShow1 ''Commit)
+$(deriveShow2 ''Commit)
+$(deriveEq2   ''Commit)
+$(deriveEq1   ''Commit)
+
+type HashableCommit = Commit (Hash HashableDir)
+
+instance AE.ToJSON1 (Commit (Hash (Dir (Hash Blob))))
+instance AE.FromJSON1 (Commit (Hash (Dir (Hash Blob))))
+
+-- | sort dir here by file name, specific order is irrelevant
+canonicalOrdering :: [NamedFileTreeEntity a b] -> [NamedFileTreeEntity a b]
+canonicalOrdering = sortOn fst
+
+bitraverseSecond
+  :: Bitraversable f => Applicative m
+  => (a -> m b) -> f a c -> m (f b c)
+bitraverseSecond f = bitraverse f pure
+
+bitraverseFix
+  :: Bitraversable f => Monad m => Traversable (f a)
+  => (a -> m b) -> Fix (f a) -> m (Fix (f b))
+bitraverseFix f = cataM (fmap Fix . bitraverseSecond f)
+
+instance Hashable Blob where
   -- file-type entities
-  hash (Blob x) = doHash ["blob", unpackString x]
+  hash (Chunk chunk next) = doHash $ ["blob", unpackString chunk, unpackHash next]
+  hash (Empty) = emptyHash
 
+instance Hashable HashableDir where
+  hash (Dir []) = emptyHash
   -- non-empty dir-type entities
-  hash (Dir xs) = doHash $ ["dir" :: ByteString] ++ join (fmap hashNFTE $ canonicalOrdering xs)
-    where hashNFTE (name, f) = [unpackString name] ++ hashFTE f
-          hashFTE =
-            fte (\(chp :: Hash 'BlobTag) -> ["subfile", unpackHash chp])
-                (\(chp :: Hash 'DirTag)  -> ["subdir", unpackHash chp])
+  hash (Dir xs) = doHash $ ["dir" :: ByteString] ++ join (fmap hash' $ canonicalOrdering xs)
+    where
+      hash' (n, FileEntity h) = ["subfile", unpackString n, unpackHash h]
+      hash' (n, DirEntity  h) = ["subdir",  unpackString n, unpackHash h]
 
+instance Hashable HashableCommit where
   -- commit-type entities
+  hash NullCommit = emptyHash
   hash (Commit msg root parents)
     = doHash $
         [ unpackString msg
         , unpackHash root
         ] ++ toList (fmap unpackHash parents)
-
-nullCommitHash :: Hash 'CommitTag
-nullCommitHash = doHash [mempty]
-
-emptyDirHash :: Hash 'DirTag
-emptyDirHash = doHash [mempty]
