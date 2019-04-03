@@ -1,45 +1,39 @@
 module Main where
 
-import           Control.Exception.Safe                (throw, bracket)
-
-import Data.Functor.Compose
-import Control.Monad.IO.Class
-import Test.Hspec
-import HGit.Diff
-import HGit.Merge
-import HGit.Diff.Types
-import HGit.Types.HGit
-import Util.MyCompose
-import Util.RecursionSchemes
-import Merkle.Functors
-import Merkle.Store
-import Merkle.Store.Network
-import Merkle.Store.FileSystem
-import Merkle.Store.Deref
-import Merkle.Types
-import Data.Map (Map)
-import qualified Data.Map as M
-import           Control.Monad.Trans.State.Lazy (StateT, gets, runStateT, modify)
-import           Control.Monad.Trans.Except (runExceptT)
-
-import           Hedgehog
-import Control.Monad.Fail (MonadFail)
-
-import System.IO.Temp
-import System.IO
-
-import qualified Hedgehog.Gen as Gen
-import qualified Hedgehog.Range as Range
+--------------------------------------------
 import qualified Control.Concurrent               as C
+import           Control.Exception.Safe (throw, bracket)
+import           Control.Monad.Fail (MonadFail)
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.State.Lazy (StateT, gets, runStateT, modify)
+import           Data.Functor.Compose
+import           Data.Map (Map)
+import qualified Data.Map as M
+import           Network.HTTP.Client (newManager, defaultManagerSettings)
 import qualified Network.Wai.Handler.Warp         as Warp
 import           Servant.Client (mkClientEnv, runClientM, Scheme(..), BaseUrl(..))
+import           System.IO.Temp
+import           System.IO
+--------------------------------------------
+import           Hedgehog
+import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Range as Range
+import           Test.Hspec
+--------------------------------------------
+import           Data.Aeson.Orphans ()
+import           HGit.Core.Diff
+import           HGit.Core.Merge
+import           HGit.Core.Types
+import           Merkle.Functors
+import           Merkle.Store
+import           Merkle.Store.Network
+import           Merkle.Store.FileSystem
+import           Merkle.Store.Deref
+import           Merkle.Types
+import           Util.MyCompose
+import           Util.RecursionSchemes
+--------------------------------------------
 
-import Network.HTTP.Client (newManager, defaultManagerSettings)
-
-import Data.Aeson.Orphans ()
-
-
--- TODO: split merkle and hgit tests?
 
 main :: IO ()
 main = do
@@ -189,7 +183,7 @@ main = do
         (strictRes, _) <- flip runStateT (M.empty :: SSMap HashableDir) $ do
           -- needs to be derefed from store, so upload
           _ <- strictDeref shared >>= uploadDeep testStore . stripTags
-          Right res <- runExceptT $ mergeMerkleDirs' testStore r1 r2
+          Right res <- mergeMerkleDirs testStore r1 r2
 
           -- res still has poisoned branches, so deref from pointer (b/c store has shared structure)
           strictDeref $ lazyDeref' testStore $ htPointer res
@@ -216,7 +210,7 @@ main = do
                            ]
 
         (strictRes, _) <- flip runStateT M.empty $ do
-          Right res <- runExceptT $ mergeMerkleDirs' testStore r1 r2
+          Right res <- mergeMerkleDirs testStore r1 r2
           strictDeref res
 
         strictExpected <- strictDeref expected -- janky.. should have lazy & strict branches
@@ -226,8 +220,7 @@ main = do
         let r1 = dir [dir' "baz" [file "bar" "bar.body.b"]]
             r2 = dir [dir' "baz" [file "bar" "bar.body.a"]]
 
-        (Left err, _storeState) <- flip runStateT M.empty
-                                 . runExceptT $ mergeMerkleDirs' testStore r1 r2
+        (Left err, _storeState) <- flip runStateT M.empty $ mergeMerkleDirs testStore r1 r2
 
         err `shouldBe` MergeViolation ["baz", "bar"]
 

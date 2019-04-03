@@ -1,12 +1,10 @@
 module Merkle.Store.Deref where
 
 --------------------------------------------
-import           Control.Exception.Safe (MonadThrow, throw)
+import           Control.Exception.Safe (MonadThrow, throwString)
 import           Control.Monad.Trans.Maybe
 import           Data.Functor.Compose
-import           Data.Functor.Const
 --------------------------------------------
-import           Errors
 import           Util.RecursionSchemes
 import           Merkle.Functors
 import           Merkle.Store
@@ -39,7 +37,7 @@ lazyDeref' store = cata alg . lazyDeref store
   where
     alg (Compose (h, Compose eff)) = Fix . Compose . (h,) . Compose $ do
       res <- runMaybeT eff
-      maybe (throw $ LookupError (getConst h)) pure res
+      maybe (throwString $ "lookup error: " ++ show h) pure res
 
 -- | construct a potentially-infinite tree-shaped stream of further values constructed by
 -- deref-ing hash pointers using a hash-addressed store. Allows for store returning multiple
@@ -61,3 +59,7 @@ lazyDeref store = futu alg
     helper (Compose (p, (Compose Nothing))) = Pure p
     helper (Compose (p, (Compose(Just x))))
       = Free . Compose $ (p, (Compose $ pure $ x))
+
+
+sDeref' :: MonadThrow m => Store m f -> Hash f -> m (DerefRes f)
+sDeref' s h = sDeref s h >>= maybe (throwString $ "lookup error: " ++ show h) pure

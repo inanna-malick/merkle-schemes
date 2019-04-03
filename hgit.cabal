@@ -11,23 +11,22 @@ cabal-version:       >=1.10
 library
   hs-source-dirs: src
   exposed-modules:
-        Commands
         Data.Aeson.Orphans
-        Errors
-        FileIO
-        HGit.Diff
-        HGit.Diff.Types
-        HGit.Merge
-        HGit.Network
-        HGit.Repo
+        HGit.Core.Diff
+        HGit.Core.Merge
+        HGit.Core.Types
+        HGit.Runtime.FileIO
+        HGit.Runtime.Capabilities
+        HGit.Runtime.Commands
+        HGit.Runtime.Network
+        HGit.Runtime.RunCmd
+        HGit.Runtime.Types
         Merkle.Functors
         Merkle.Store
         Merkle.Store.Deref
         Merkle.Store.FileSystem
         Merkle.Store.Network
         Merkle.Types
-        HGit.Types.HGit
-        HGit.Types.RepoState
         Util.RecursionSchemes
         Util.MyCompose
         Util.These
@@ -58,6 +57,7 @@ library
                , text
                , transformers
                , vector
+               , warp
   ghc-options: -Wall -Werror -Wno-redundant-constraints
 
   default-language:    Haskell2010
@@ -142,6 +142,7 @@ executable hgit
                , containers
                , directory
                , hgit
+               , mtl
                , safe-exceptions
                , servant-client
                , servant-server

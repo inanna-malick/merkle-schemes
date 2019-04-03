@@ -1,19 +1,19 @@
 -- | Functions for interacting with the filesystem to
 -- create dir trees from merkle trees or vice versa
-module FileIO where
+module HGit.Runtime.FileIO where
 
 --------------------------------------------
 import           Control.Monad.Except
 import           Control.Monad.Trans.State.Lazy
+import           Data.Bitraversable (bitraverse)
 import qualified Data.List as List
 import           Data.Foldable (traverse_)
 import qualified System.Directory as Dir
+import           System.IO
 --------------------------------------------
 import           Util.RecursionSchemes
-import           HGit.Types.HGit
+import           HGit.Core.Types
 --------------------------------------------
-import           System.IO
-import Data.Bitraversable (bitraverse)
 
 
 -- | Write strict hgit dirtree to file path

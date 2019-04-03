@@ -1,8 +1,8 @@
-module HGit.Repo where
+module HGit.Runtime.Capabilities where
 
 
 --------------------------------------------
-import           Control.Exception.Safe (MonadThrow, throw)
+import           Control.Exception.Safe (MonadThrow, throwString)
 import           Control.Monad (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Aeson as AE
@@ -10,13 +10,13 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.Map as M
 import qualified System.Directory as Dir
 --------------------------------------------
-import           Errors
-import           HGit.Types.HGit
-import           HGit.Types.RepoState
+import           HGit.Core.Types
+import           HGit.Runtime.Types
 import           Merkle.Types
 import           Merkle.Store
 import           Merkle.Store.FileSystem (fsStore)
 --------------------------------------------
+import           Control.Monad.Reader
 
 
 hgitDir, hgitStateFile, hgitStoreDir :: PartialFilePath
@@ -25,9 +25,9 @@ hgitStateFile = "state.json"
 hgitStoreDir = "store"
 
 -- TODO: dir tree traversal to allow for running app in non-root repo dir? mb
-hgitDir', hgitState', hgitStore', baseDir :: MonadIO m => m FilePath
-baseDir    = liftIO Dir.getCurrentDirectory
-hgitDir'   = (++ "/" ++ hgitDir)       <$> baseDir
+hgitDir', hgitState', hgitStore', hgitBaseDir :: MonadIO m => m FilePath
+hgitBaseDir    = liftIO Dir.getCurrentDirectory
+hgitDir'   = (++ "/" ++ hgitDir)       <$> hgitBaseDir
 hgitState' = (++ "/" ++ hgitStateFile) <$> hgitDir'
 hgitStore' = (++ "/" ++ hgitStoreDir)  <$> hgitDir'
 
@@ -41,20 +41,23 @@ mkHgitDir = do
 
 -- | get branch from state, fail if not found
 getBranch
-  :: MonadThrow m
-  => BranchName
-  -> RepoState
-  -> m (Hash HashableCommit)
-getBranch b
-  = maybe (throw $ BranchNotFound b) pure . M.lookup b . branches
+  :: MonadThrow m  => MonadReader (RepoCaps m') m
+  => BranchName -> m (Hash HashableCommit)
+getBranch bn
+  = asks rcState >>= getBranch' bn
+
+-- | get branch from state, fail if not found
+getBranch'
+  :: MonadThrow m => BranchName -> RepoState -> m (Hash HashableCommit)
+getBranch' bn
+  = maybe (throwString $ "branch not found: " ++ bn) pure . M.lookup bn . branches
 
 -- | get remote addr from state, fail if not found
 getRemote
   :: MonadThrow m
-  => RepoState
-  -> m (String, Int)
-getRemote = maybe (throw RemoteNotFound) pure . remote
-
+  => MonadReader (RepoCaps m') m
+  => m (String, Int)
+getRemote = asks (remote . rcState) >>= maybe (throwString "remote node addr not foudn") pure
 
 -- | Filesystem backed store using the provided dir
 readState
@@ -63,9 +66,8 @@ readState
   => m RepoState
 readState = do
   path <- hgitState'
-  contents <- liftIO $ B.readFile path
-  case (AE.eitherDecode contents) of
-    Left e  -> throw $ DecodeError e
+  liftIO $ AE.eitherDecodeFileStrict path >>= \case
+    Left e  -> throwString e
     Right x -> pure x
 
 writeState
@@ -77,22 +79,30 @@ writeState rs = do
   path <- hgitState'
   liftIO . B.writeFile path $ AE.encode rs
 
-data RepoCaps m
-  = RepoCaps
+data HgitStore m
+  = HgitStore
   { _blobStore   :: Store m Blob
   , _dirStore    :: Store m HashableDir
   , _commitStore :: Store m HashableCommit
   }
 
-withFallbackRC :: Monad m => RepoCaps m -> RepoCaps m -> RepoCaps m
+withFallbackRC :: Monad m => HgitStore m -> HgitStore m -> HgitStore m
 withFallbackRC main fallback
-  = RepoCaps
+  = HgitStore
   { _blobStore   = withFallback (_blobStore main)   (_blobStore fallback)
   , _dirStore    = withFallback (_dirStore main)    (_dirStore fallback)
   , _commitStore = withFallback (_commitStore main) (_commitStore fallback)
   }
 
 -- TODO: create dir structure?
-mkLocalCaps :: IO (RepoCaps IO)
-mkLocalCaps = RepoCaps <$> mkStore "blob" <*> mkStore "dir" <*> mkStore "commit"
+mkLocalCaps :: IO (HgitStore IO)
+mkLocalCaps = HgitStore <$> mkStore "blob" <*> mkStore "dir" <*> mkStore "commit"
   where mkStore prefix = fsStore . (++ "/" ++ prefix) <$> hgitStore'
+
+
+data RepoCaps m
+  = RepoCaps
+  { rcStore :: HgitStore m
+  , rcState :: RepoState
+  , rcBaseDir :: FilePath
+  }

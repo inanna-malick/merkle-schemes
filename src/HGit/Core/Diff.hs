@@ -1,7 +1,7 @@
 -- | Code for comparing two merkle trees in which any node can be
 -- either a hash-addressed htPointer to an entity in a remote store
 -- or a direct representation of a hash-addressed entity
-module HGit.Diff (diffMerkleDirs) where
+module HGit.Core.Diff where
 
 --------------------------------------------
 import           Control.Monad (join)
@@ -9,8 +9,7 @@ import           Control.Monad.IO.Class
 import           Data.Functor.Compose
 import qualified Data.Map.Strict as Map
 --------------------------------------------
-import           HGit.Diff.Types
-import           HGit.Types.HGit
+import           HGit.Core.Types
 import           Merkle.Functors
 import           Util.These (These(..), mapCompare)
 import           Util.RecursionSchemes
@@ -35,7 +34,6 @@ diffMerkleDirs = compareDir []
       :: [PartialFilePath]
       -> Fix (HashAnnotated (Dir x) `Compose` m `Compose` Dir x)
       -> Fix (HashAnnotated (Dir x) `Compose` m `Compose` Dir x)
-      -- todo: writer w/ stack (?) so I can push/path segments to go with changes to tag diffs with loc...
       -> m [([PartialFilePath], Diff)]
     compareDir h dir1 dir2 =
       if htPointer dir1 == htPointer dir2
@@ -47,38 +45,35 @@ diffMerkleDirs = compareDir []
             fmap join . traverse (resolveMapDiff h)
                       $ mapCompare (Map.fromList ns1') (Map.fromList ns2')
 
-    resolveMapDiff
-      :: [PartialFilePath]
-      -> ( PartialFilePath
-         , These (FileTreeEntity x (Fix (HashAnnotated (Dir x) `Compose` m `Compose` Dir x)))
-                 (FileTreeEntity x (Fix (HashAnnotated (Dir x) `Compose` m `Compose` Dir x)))
-         )
-      -> m [([PartialFilePath], Diff)]
-    resolveMapDiff h
-      (n, This _) = pure [(h ++ [n], EntityDeleted)]
-    resolveMapDiff h
-      (n, These e1 e2) = do
-        -- liftIO $ putStrLn $ "compareDerefed" ++ n
-        compareDerefed h n e1 e2
-    resolveMapDiff h
-      (n, That _) = pure [(h ++ [n], EntityCreated)]
 
-    -- TODO: new name?
-    compareDerefed
-      :: [PartialFilePath]
-      -> PartialFilePath
-      -> FileTreeEntity x (Fix (HashAnnotated (Dir x) `Compose` m `Compose` Dir x))
-      -> FileTreeEntity x (Fix (HashAnnotated (Dir x) `Compose` m `Compose` Dir x))
-      -> m [([PartialFilePath], Diff)]
-    compareDerefed h path (DirEntity _) (FileEntity _)
+    resolveMapDiff h (n, This _) = pure [(h ++ [n], EntityDeleted)]
+    resolveMapDiff h (n, That _) = pure [(h ++ [n], EntityCreated)]
+
+    -- two files with the same path
+    resolveMapDiff h (path, These (FileEntity x1) (FileEntity x2))
+          -- they're identical, no diff
+          | x1 == x2  = pure []
+          -- file entities are not equal, file modified
+          | otherwise = pure [(h ++ [path], FileModified)]
+
+    -- two dirs with the same path
+    resolveMapDiff h (path, These (DirEntity dir1) (DirEntity dir2))
+          -- pointers match, they're identical, just stop here
+          | htPointer dir1 == htPointer dir2 = pure []
+          | otherwise = compareDir (h ++ [path]) dir1 dir2
+
+    -- dir replaced with file
+    resolveMapDiff h (path, These (DirEntity _) (FileEntity _))
       = pure [(h ++ [path], DirReplacedWithFile)]
-    compareDerefed h path (FileEntity _) (DirEntity _)
+
+    -- file replaced with dir
+    resolveMapDiff h (path, These (FileEntity _) (DirEntity _))
       = pure [(h ++ [path], FileReplacedWithDir)]
-    compareDerefed h path (FileEntity x1) (FileEntity x2)
-      | x1 /= x2 = pure [(h ++ [path], FileModified)]
-      | otherwise = do
-          -- liftIO $ putStrLn $ "compare FileEntity (file) with FileEntity (file) same htPointers"
-          pure []
-    compareDerefed h path (DirEntity dir1) (DirEntity dir2)
-      | htPointer dir1 == htPointer dir2 = pure []
-      | otherwise = compareDir (h ++ [path]) dir1 dir2
+
+
+data Diff = FileModified
+          | FileReplacedWithDir
+          | DirReplacedWithFile
+          | EntityDeleted
+          | EntityCreated
+  deriving (Eq, Ord, Show)
