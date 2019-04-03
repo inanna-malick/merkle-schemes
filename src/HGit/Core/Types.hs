@@ -1,9 +1,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module HGit.Types.HGit where
+module HGit.Core.Types where
 
 --------------------------------------------
 import qualified Data.Aeson as AE
+import           Data.Bifunctor.TH
+import           Data.Bitraversable (Bitraversable(..))
 import           Data.ByteString (ByteString)
 import           Data.Eq.Deriving
 import           Data.List (sortOn)
@@ -15,25 +17,19 @@ import           Text.Show.Deriving
 import           Merkle.Types
 import           Util.RecursionSchemes
 --------------------------------------------
-import Data.Bifunctor.TH
-import Data.Bitraversable (Bitraversable(..))
-
-
 
 type PartialFilePath = String
 type BranchName      = String
 type CommitMessage   = String
 
-
 data Blob a
+  -- NOTE: using String instead of Bytestring to allow for easy examination of serialized files
   = Chunk String a
   | Empty
-  -- NOTE: using String instead of Bytestring to allow for easy examination of serialized files
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic1)
 
 instance AE.ToJSON1 Blob
 instance AE.FromJSON1 Blob
-
 
 data FileTreeEntity a b
   = FileEntity a -- file type
@@ -98,12 +94,12 @@ canonicalOrdering :: [NamedFileTreeEntity a b] -> [NamedFileTreeEntity a b]
 canonicalOrdering = sortOn fst
 
 bitraverseSecond
-  :: Bitraversable f => Applicative m
+  :: ( Bitraversable f, Applicative m)
   => (a -> m b) -> f a c -> m (f b c)
 bitraverseSecond f = bitraverse f pure
 
 bitraverseFix
-  :: Bitraversable f => Monad m => Traversable (f a)
+  :: (Bitraversable f, Monad m, Traversable (f a))
   => (a -> m b) -> Fix (f a) -> m (Fix (f b))
 bitraverseFix f = cataM (fmap Fix . bitraverseSecond f)
 

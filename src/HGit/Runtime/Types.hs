@@ -1,12 +1,11 @@
-
-module HGit.Types.RepoState (RepoState(..), initialRepoState) where
+module HGit.Runtime.Types (RepoState(..), initialRepoState) where
 
 --------------------------------------------
 import           Data.Aeson
 import qualified Data.Map as M
 import           GHC.Generics
 --------------------------------------------
-import           HGit.Types.HGit
+import           HGit.Core.Types
 import           Merkle.Types (Hash, emptyHash)
 --------------------------------------------
 

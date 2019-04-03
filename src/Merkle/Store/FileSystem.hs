@@ -1,17 +1,16 @@
 module Merkle.Store.FileSystem where
 
 --------------------------------------------
-import           Control.Exception.Safe (MonadThrow, throw)
+import           Control.Exception.Safe (MonadThrow, throwString)
 import           Control.Monad.Except
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Encoding as AE (encodingToLazyByteString)
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import           Data.Functor.Compose
 import           Data.Functor.Const
+import           Data.Text (unpack)
 import           System.Directory (doesFileExist)
 --------------------------------------------
-import           Errors
 import           Merkle.Store
 import           Merkle.Types
 import           Util.RecursionSchemes
@@ -36,12 +35,11 @@ fsStore root
       exists <- liftIO $ doesFileExist fp
       if not exists
         then pure Nothing
-        else do
-          contents <- liftIO $ B.readFile fp
-          case AE.eitherDecodeStrict contents of
+        else liftIO $ AE.eitherDecodeFileStrict fp >>= \case
             -- throw if deserialization fails
-            Left  e -> throw . DecodeError $ show e
-            Right (HashTerm x) -> pure . Just $ fmap (\p' -> Fix $ Compose (p', Compose Nothing)) x
+            Left  e -> throwString e
+            Right (HashTerm x) ->
+              pure . Just $ fmap (\p' -> Fix $ Compose (p', Compose Nothing)) x
 
   , sUploadShallow = \x -> do
       let p = hash x
@@ -53,4 +51,4 @@ fsStore root
   }
   where
     fn :: Hash i -> String
-    fn = show . hashToText . getConst
+    fn = unpack . hashToText . getConst

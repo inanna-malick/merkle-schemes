@@ -1,10 +1,10 @@
 
-module Commands (MetaCommand(..), RepoCommand(..), parse) where
+module HGit.Runtime.Commands (MetaCommand(..), RepoCommand(..), parse) where
 
 import Options.Applicative
 import Data.Semigroup ((<>))
 
-import HGit.Types.HGit
+import HGit.Core.Types
 
 
 parse :: IO (MetaCommand `Either` RepoCommand)
@@ -92,7 +92,7 @@ parser
           ( metavar "BRANCHNAME"
          <> help "branch to create"
           )
-    initSOptions  = pure $ InitServer 8888
+    initSOptions  = pure $ InitServer 8888 -- todo: impl parser here!
     initROptions  = pure InitRepo
     commitOptions
         = MkCommit
