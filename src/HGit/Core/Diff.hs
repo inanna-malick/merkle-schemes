@@ -5,7 +5,6 @@ module HGit.Core.Diff where
 
 --------------------------------------------
 import           Control.Monad (join)
-import           Control.Monad.IO.Class
 import           Data.Functor.Compose
 import qualified Data.Map.Strict as Map
 --------------------------------------------
@@ -22,9 +21,9 @@ diffMerkleDirs
   :: forall m x
   -- no knowledge about actual monad stack - just knows it can
   -- sequence actions in it to deref successive layers (because monad)
-   . Monad m
-  => Eq x
-  => MonadIO m
+   . ( Monad m
+     , Eq x
+     )
   => Fix (HashAnnotated (Dir x) `Compose` m `Compose` Dir x)
   -> Fix (HashAnnotated (Dir x) `Compose` m `Compose` Dir x)
   -> m [([PartialFilePath], Diff)]
