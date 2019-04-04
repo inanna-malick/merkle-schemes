@@ -1,6 +1,8 @@
 module HGit.Core.Merge where
 
 --------------------------------------------
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.Writer
 import           Control.Monad.Trans.Except
 import qualified Data.Map.Strict as Map
 import           Data.Functor.Compose
@@ -8,6 +10,7 @@ import           Data.Functor.Compose
 import           HGit.Core.Types
 import           Merkle.Functors
 import           Merkle.Store
+import           Merkle.Types
 import           Util.These (These(..), mapCompare)
 import           Util.MyCompose
 import           Util.RecursionSchemes
@@ -25,32 +28,36 @@ mergeMerkleDirs
   -- sequence actions in it to deref successive layers (because monad)
    . ( Monad m
      , Eq x
+     , Hashable (Dir x)
      )
   -- used to upload new dirs created during merge process
-  => Store m (Dir x)
+  => Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
   -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-  -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-  -> m $ MergeViolation `Either` Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-mergeMerkleDirs store = (runExceptT .) . mergeDirs []
+  -> m $ MergeViolation `Either`
+           ( [Dir x (Hash (Dir x))]
+           , Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+           )
+mergeMerkleDirs dir1' dir2' = runExceptT $ runWriterT $ mergeDirs [] dir1' dir2'
   where
-    mergeDirs
-      :: [PartialFilePath]
-      -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-      -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-      -> ExceptT MergeViolation m $ Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+    -- mergeDirs
+    --   :: [PartialFilePath]
+    --   -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+    --   -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+    --   ->  ExceptT MergeViolation m (WriterT [Dir x (Hash (Dir x))] m)
+    --        $ Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
     mergeDirs h dir1 dir2 = do
       if htPointer dir1 == htPointer dir2
           then pure dir1 -- if both htPointers == then they're identical, either is fine for merge res
           else do
-            ns1' <- ExceptT . fmap (Right . dirEntries) . getCompose $ htElem dir1
-            ns2' <- ExceptT . fmap (Right . dirEntries) . getCompose $ htElem dir2
+            ns1' <- lift . lift . fmap dirEntries . getCompose $ htElem dir1
+            ns2' <- lift . lift . fmap dirEntries . getCompose $ htElem dir2
 
             entries <- traverse (resolveMapDiff h)
                       $ mapCompare (Map.fromList ns1') (Map.fromList ns2')
 
             let dir = Dir $ canonicalOrdering entries
                 dir' = fmap htPointer dir
-            p <- ExceptT $ Right <$> sUploadShallow store dir'
+            p <- pure $ hash dir'
             pure $ Fix . Compose . (p,) . Compose $ pure dir
 
     resolveMapDiff _
@@ -63,7 +70,7 @@ mergeMerkleDirs store = (runExceptT .) . mergeDirs []
           -- they're identical, continue merge
           | x1 == x2  = pure (path, FileEntity x1)
           -- file entities are not equal, merge cannot continue
-          | otherwise = throwE . MergeViolation $ h ++ [path]
+          | otherwise = lift . throwE . MergeViolation $ h ++ [path]
 
     -- two dirs with the same path
     resolveMapDiff h (path, These (DirEntity dir1) (DirEntity dir2))
@@ -72,7 +79,7 @@ mergeMerkleDirs store = (runExceptT .) . mergeDirs []
           | otherwise = (path,) . DirEntity <$> mergeDirs (h ++ [path]) dir1 dir2
 
     -- neither a (file, file) change nor a (dir, dir) change. fail.
-    resolveMapDiff h (path, These _ _) = throwE . MergeViolation $ h ++ [path]
+    resolveMapDiff h (path, These _ _) = lift . throwE . MergeViolation $ h ++ [path]
 
 data MergeViolation = MergeViolation { mergeViolationPath :: [PartialFilePath] }
   deriving (Eq, Show)
