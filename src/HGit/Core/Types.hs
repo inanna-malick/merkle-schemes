@@ -5,16 +5,17 @@ module HGit.Core.Types where
 --------------------------------------------
 import qualified Data.Aeson as AE
 import           Data.Bifunctor.TH
-import           Data.Bitraversable (Bitraversable(..))
 import           Data.ByteString (ByteString)
 import           Data.Eq.Deriving
 import           Data.List (sortOn)
 import           Data.List.NonEmpty (NonEmpty, toList)
+import           Data.Functor.Compose
 import           Control.Monad (join)
 import           GHC.Generics
 import           Text.Show.Deriving
 --------------------------------------------
 import           Merkle.Types
+import           Merkle.Functors
 import           Util.RecursionSchemes
 --------------------------------------------
 
@@ -59,6 +60,8 @@ data Dir a b = Dir { dirEntries :: [NamedFileTreeEntity a b] }
 
 type HashableDir = Dir (Hash Blob)
 
+type LazyMerkleDir m x = Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+
 $(deriveBifoldable    ''Dir)
 $(deriveBifunctor     ''Dir)
 $(deriveBitraversable ''Dir)
@@ -92,16 +95,6 @@ instance AE.FromJSON1 HashableCommit
 -- | sort dir here by file name, specific order is irrelevant
 canonicalOrdering :: [NamedFileTreeEntity a b] -> [NamedFileTreeEntity a b]
 canonicalOrdering = sortOn fst
-
-bitraverseSecond
-  :: ( Bitraversable f, Applicative m)
-  => (a -> m b) -> f a c -> m (f b c)
-bitraverseSecond f = bitraverse f pure
-
-bitraverseFix
-  :: (Bitraversable f, Monad m, Traversable (f a))
-  => (a -> m b) -> Fix (f a) -> m (Fix (f b))
-bitraverseFix f = cataM (fmap Fix . bitraverseSecond f)
 
 instance Hashable Blob where
   -- file-type entities

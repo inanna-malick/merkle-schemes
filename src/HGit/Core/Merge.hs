@@ -25,24 +25,19 @@ mergeMerkleDirs
   :: forall m x
   -- no knowledge about actual monad stack - just knows it can
   -- sequence actions in it to deref successive layers (because monad)
-   . ( Monad m
-     , Eq x
-     , Hashable (Dir x)
-     )
-  => Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-  -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+   . ( Monad m, Eq x, Hashable (Dir x))
+  => LazyMerkleDir m x -> LazyMerkleDir m x
   -> m $ MergeViolation `Either`
-           ( Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+           ( LazyMerkleDir m x -- result of the merge
            , [Dir x (Hash (Dir x))] -- new structure created during merge, to be uploaded
            )
 mergeMerkleDirs dir1' dir2' = runExceptT $ runWriterT $ mergeDirs [] dir1' dir2'
   where
     mergeDirs
       :: [PartialFilePath]
-      -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-      -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-      ->  WriterT [Dir x (Hash (Dir x))] (ExceptT MergeViolation m)
-           $ Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+      ->  LazyMerkleDir m x
+      ->  LazyMerkleDir m x
+      ->  WriterT [Dir x (Hash (Dir x))] (ExceptT MergeViolation m) (LazyMerkleDir m x)
     mergeDirs h dir1 dir2 = do
       if htPointer dir1 == htPointer dir2
           then pure dir1 -- if both htPointers == then they're identical, either is fine for merge res
