@@ -9,7 +9,6 @@ import           Data.Functor.Compose
 --------------------------------------------
 import           HGit.Core.Types
 import           Merkle.Functors
-import           Merkle.Store
 import           Merkle.Types
 import           Util.These (These(..), mapCompare)
 import           Util.MyCompose
@@ -30,21 +29,20 @@ mergeMerkleDirs
      , Eq x
      , Hashable (Dir x)
      )
-  -- used to upload new dirs created during merge process
   => Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
   -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
   -> m $ MergeViolation `Either`
-           ( [Dir x (Hash (Dir x))]
-           , Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+           ( Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+           , [Dir x (Hash (Dir x))] -- new structure created during merge, to be uploaded
            )
 mergeMerkleDirs dir1' dir2' = runExceptT $ runWriterT $ mergeDirs [] dir1' dir2'
   where
-    -- mergeDirs
-    --   :: [PartialFilePath]
-    --   -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-    --   -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
-    --   ->  ExceptT MergeViolation m (WriterT [Dir x (Hash (Dir x))] m)
-    --        $ Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+    mergeDirs
+      :: [PartialFilePath]
+      -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+      -> Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
+      ->  WriterT [Dir x (Hash (Dir x))] (ExceptT MergeViolation m)
+           $ Fix (HashAnnotated (Dir x) `Compose` m `Compose`  Dir x)
     mergeDirs h dir1 dir2 = do
       if htPointer dir1 == htPointer dir2
           then pure dir1 -- if both htPointers == then they're identical, either is fine for merge res
@@ -57,8 +55,8 @@ mergeMerkleDirs dir1' dir2' = runExceptT $ runWriterT $ mergeDirs [] dir1' dir2'
 
             let dir = Dir $ canonicalOrdering entries
                 dir' = fmap htPointer dir
-            p <- pure $ hash dir'
-            pure $ Fix . Compose . (p,) . Compose $ pure dir
+            tell [dir']
+            pure $ Fix . Compose . (hash dir',) . Compose $ pure dir
 
     resolveMapDiff _
       (path, This x) = pure (path, x) -- non-conflicting change, keep

@@ -161,20 +161,22 @@ mkMergeCommit targetBranch msg = do
       currentCommit <- sDeref' commitStore currentCommitHash
       targetCommit  <- sDeref' commitStore targetCommitHash
 
-      mergeRes <- mergeMerkleDirs dirStore (lazyDeref' dirStore $ commitRoot currentCommit)
-                                           (lazyDeref' dirStore $ commitRoot targetCommit)
+      mergeRes <- mergeMerkleDirs (lazyDeref' dirStore $ commitRoot currentCommit)
+                                  (lazyDeref' dirStore $ commitRoot targetCommit)
 
       case mergeRes of
         Left err -> liftIO . fail $ "merge nonviable due to: " ++ show err
-        Right root -> do
-          let commit = Commit msg (htPointer root) $ currentCommitHash :| [targetCommitHash]
-          rootHash <- sUploadShallow commitStore commit
+        Right (rootDir, newDirs)-> do
+          _ <- traverse (sUploadShallow dirStore) newDirs
+
+          let commit = Commit msg (htPointer rootDir) $ currentCommitHash :| [targetCommitHash]
+          commitHash <- sUploadShallow commitStore commit
 
           topLevelCurrentDir <- sDeref' dirStore $ commitRoot currentCommit
 
-          setDirTo topLevelCurrentDir $ htPointer root
+          setDirTo topLevelCurrentDir $ htPointer rootDir
 
-          asks (Just . (\r -> r { branches = M.insert (currentBranch r) rootHash $ branches r
+          asks (Just . (\r -> r { branches = M.insert (currentBranch r) commitHash $ branches r
                                 }
                        ) . rcState)
 

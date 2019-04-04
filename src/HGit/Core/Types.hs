@@ -86,8 +86,8 @@ $(deriveEq1   ''Commit)
 
 type HashableCommit = Commit (Hash HashableDir)
 
-instance AE.ToJSON1 (Commit (Hash (Dir (Hash Blob))))
-instance AE.FromJSON1 (Commit (Hash (Dir (Hash Blob))))
+instance AE.ToJSON1   HashableCommit
+instance AE.FromJSON1 HashableCommit
 
 -- | sort dir here by file name, specific order is irrelevant
 canonicalOrdering :: [NamedFileTreeEntity a b] -> [NamedFileTreeEntity a b]

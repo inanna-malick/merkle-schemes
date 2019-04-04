@@ -183,7 +183,8 @@ main = do
         (strictRes, _) <- flip runStateT (M.empty :: SSMap HashableDir) $ do
           -- needs to be derefed from store, so upload
           _ <- strictDeref shared >>= uploadDeep testStore . stripTags
-          Right res <- mergeMerkleDirs testStore r1 r2
+          Right (res, toUpload) <- mergeMerkleDirs r1 r2
+          _ <- traverse (sUploadShallow testStore) toUpload
 
           -- res still has poisoned branches, so deref from pointer (b/c store has shared structure)
           strictDeref $ lazyDeref' testStore $ htPointer res
@@ -210,7 +211,7 @@ main = do
                            ]
 
         (strictRes, _) <- flip runStateT M.empty $ do
-          Right res <- mergeMerkleDirs testStore r1 r2
+          Right (res, _) <- mergeMerkleDirs r1 r2
           strictDeref res
 
         strictExpected <- strictDeref expected -- janky.. should have lazy & strict branches
@@ -220,7 +221,7 @@ main = do
         let r1 = dir [dir' "baz" [file "bar" "bar.body.b"]]
             r2 = dir [dir' "baz" [file "bar" "bar.body.a"]]
 
-        (Left err, _storeState) <- flip runStateT M.empty $ mergeMerkleDirs testStore r1 r2
+        (Left err, _storeState) <- flip runStateT M.empty $ mergeMerkleDirs r1 r2
 
         err `shouldBe` MergeViolation ["baz", "bar"]
 
