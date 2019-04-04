@@ -4,9 +4,12 @@ module Util.RecursionSchemes
   , module Util.RecursionSchemes
   ) where
 
-import Data.Functor.Compose
-import Control.Monad.Free hiding (unfold)
-import Data.Functor.Foldable
+--------------------------------------------
+import           Control.Monad.Free hiding (unfold)
+import           Data.Bitraversable (Bitraversable(..))
+import           Data.Functor.Compose
+import           Data.Functor.Foldable
+--------------------------------------------
 
 type Algebra f a = f a -> a
 type AlgebraM m f a = f a -> m a
@@ -36,4 +39,7 @@ cataM
   -> Fix f -> m a
 cataM f = (>>= f) . traverse (cataM f) . unfix
 
-
+bitraverseFix
+  :: (Bitraversable f, Monad m, Traversable (f a))
+  => (a -> m b) -> Fix (f a) -> m (Fix (f b))
+bitraverseFix f = cataM (fmap Fix . bitraverse f pure)
