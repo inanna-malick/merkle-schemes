@@ -1,0 +1,104 @@
+name: hgit
+version: 0.1.0.0
+synopsis: merkle all the things
+github: pkinsky/hgit
+author: Paul Kinsky
+category: Development
+
+ghc-options: -Wall -Werror
+
+default-extensions:
+  - DerivingStrategies
+  - DeriveFunctor
+  - DeriveFoldable
+  - DeriveGeneric
+  - DeriveTraversable
+  - DataKinds
+  - DefaultSignatures
+  - FlexibleContexts
+  - FlexibleInstances
+  - LambdaCase
+  - InstanceSigs
+  - KindSignatures
+  - NoStarIsType
+  - OverloadedStrings
+  - PolyKinds
+  - RankNTypes
+  - ScopedTypeVariables
+  - TupleSections
+  - TypeFamilies
+  - StandaloneDeriving
+  - TemplateHaskell
+  - TypeApplications
+  - TypeOperators
+
+dependencies:
+  - base >=4.8
+  - aeson
+  - base16-bytestring
+  - bifunctors
+  - bytestring
+  - containers
+  - cryptonite
+  - directory
+  - deriving-compat
+  - free
+  - http-client
+  - hedgehog
+  - memory
+  - mtl
+  - unordered-containers
+  - pretty
+  - optparse-applicative
+  - random
+  - recursion-schemes
+  - safe-exceptions
+  - servant
+  - servant-client
+  - servant-server
+  - singletons
+  - text
+  - transformers
+  - vector
+  - warp
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - Data.Aeson.Orphans
+    - HGit.Core.Diff
+    - HGit.Core.Merge
+    - HGit.Core.Types
+    - HGit.Runtime.FileIO
+    - HGit.Runtime.Capabilities
+    - HGit.Runtime.Commands
+    - HGit.Runtime.Network
+    - HGit.Runtime.RunCmd
+    - HGit.Runtime.Types
+    - Merkle.Functors
+    - Merkle.Store
+    - Merkle.Store.Deref
+    - Merkle.Store.FileSystem
+    - Merkle.Store.Network
+    - Merkle.Types
+    - Util.RecursionSchemes
+    - Util.MyCompose
+    - Util.These
+
+executable:
+  main: Main.hs
+  source-dirs: app
+  dependencies:
+    - hgit
+
+tests:
+  spec:
+    cpp-options: -DTEST
+    main: Main.hs
+    source-dirs:
+      - test
+    dependencies:
+      - hedgehog
+      - hspec
+      - hgit
+    build-tools: hspec-discover
