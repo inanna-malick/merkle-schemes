@@ -30,7 +30,6 @@ import           Merkle.Store.Network
 import           Merkle.Store.FileSystem
 import           Merkle.Store.Deref
 import           Merkle.Types
-import           Util.MyCompose
 import           Util.RecursionSchemes
 --------------------------------------------
 
@@ -42,7 +41,7 @@ main = do
   let ffail :: MonadFail m => Hash x -> Fix (HashAnnotated x `Compose` m `Compose` x)
       ffail h = Fix $ Compose (h, Compose $ fail "Boom!")
       dir :: Applicative m
-          => [NamedFileTreeEntity (Hash Blob) (Fix $ HashAnnotated HashableDir `Compose` m `Compose` HashableDir)]
+          => [NamedFileTreeEntity (Hash Blob) (Fix (HashAnnotated HashableDir `Compose` m `Compose` HashableDir))]
           -> Fix (HashAnnotated (Dir (Hash Blob)) `Compose` m `Compose` Dir (Hash Blob))
       dir xs =
         let d = Dir xs

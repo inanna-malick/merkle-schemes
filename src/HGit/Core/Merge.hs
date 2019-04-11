@@ -11,7 +11,6 @@ import           HGit.Core.Types
 import           Merkle.Functors
 import           Merkle.Types
 import           Util.These (These(..), mapCompare)
-import           Util.MyCompose
 import           Util.RecursionSchemes
 --------------------------------------------
 
@@ -27,10 +26,11 @@ mergeMerkleDirs
   -- sequence actions in it to deref successive layers (because monad)
    . ( Monad m, Eq x, Hashable (Dir x))
   => LazyMerkleDir m x -> LazyMerkleDir m x
-  -> m $ MergeViolation `Either`
+  -> m ( MergeViolation `Either`
            ( LazyMerkleDir m x -- result of the merge
            , [Dir x (Hash (Dir x))] -- new structure created during merge, to be uploaded
            )
+       )
 mergeMerkleDirs dir1' dir2' = runExceptT $ runWriterT $ mergeDirs [] dir1' dir2'
   where
     mergeDirs

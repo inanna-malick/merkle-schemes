@@ -82,7 +82,6 @@ library:
     - Merkle.Store.Network
     - Merkle.Types
     - Util.RecursionSchemes
-    - Util.MyCompose
     - Util.These
 
 executable:
@@ -101,4 +100,5 @@ tests:
       - hedgehog
       - hspec
       - hgit
+      - temporary
     build-tools: hspec-discover
