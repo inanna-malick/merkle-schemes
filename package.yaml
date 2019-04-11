@@ -82,7 +82,6 @@ library:
     - Merkle.Store.Network
     - Merkle.Types
     - Util.RecursionSchemes
-    - Util.These
 
 executable:
   main: Main.hs
@@ -93,7 +92,7 @@ executable:
 tests:
   spec:
     cpp-options: -DTEST
-    main: Main.hs
+    main: Spec.hs
     source-dirs:
       - test
     dependencies:

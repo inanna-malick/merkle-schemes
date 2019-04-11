@@ -3,14 +3,14 @@
 module HGit.Core.Types where
 
 --------------------------------------------
+import           Control.Monad (join)
 import qualified Data.Aeson as AE
 import           Data.Bifunctor.TH
 import           Data.ByteString (ByteString)
 import           Data.Eq.Deriving
-import           Data.List (sortOn)
-import           Data.List.NonEmpty (NonEmpty, toList)
 import           Data.Functor.Compose
-import           Control.Monad (join)
+import           Data.List.NonEmpty (NonEmpty, toList)
+import qualified Data.Map.Strict as Map
 import           GHC.Generics
 import           Text.Show.Deriving
 --------------------------------------------
@@ -94,7 +94,7 @@ instance AE.FromJSON1 HashableCommit
 
 -- | sort dir here by file name, specific order is irrelevant
 canonicalOrdering :: [NamedFileTreeEntity a b] -> [NamedFileTreeEntity a b]
-canonicalOrdering = sortOn fst
+canonicalOrdering = Map.toList . Map.fromList
 
 instance Hashable Blob where
   -- file-type entities
