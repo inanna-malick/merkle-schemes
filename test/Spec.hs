@@ -144,8 +144,7 @@ main = do
 
       it "diff lazily without descending into non-conflicting dir branches changes" $ do
         let shared :: forall m. Monad m => Fix (HashAnnotated HashableDir `Compose` m `Compose` HashableDir)
-            shared = dir [ dir' "baz" [ file "bar" "bar.body"
-                         ]
+            shared = dir [ dir' "baz" [ file "bar" "bar.body"]
                          , file "bar" "bar.body"
                          ]
 
@@ -156,7 +155,7 @@ main = do
             r2 = dir [ ("shared", DirEntity . ffail $ sharedPointer)
                      , file "baz" "baz.body"]
 
-        diffTest r1 r2 [(["foo"], EntityDeleted), (["baz"], EntityCreated)]
+        diffTest r1 r2 [(["baz"], EntityCreated), (["foo"], EntityDeleted)]
 
     describe "merge" $ do
       it "merge lazily without descending into non-conflicting dir branches changes" $ do
