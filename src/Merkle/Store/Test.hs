@@ -11,24 +11,18 @@ import           Merkle.Store
 import           Merkle.Types
 --------------------------------------------
 
-
-type SSMap f = Map (Hash f) (f (Hash f))
-
--- TODO: move to Merkle.Store.Test
 testStore
-  :: forall m f s
+  :: forall m f
    . ( Hashable f
      , Functor f
      , Monad m
      )
-  => (s -> SSMap f)
-  -> (s -> SSMap f -> s)
-  -> Store (StateT s m) f
-testStore getF updateF = Store
-  { sDeref = \p -> gets (lookup' p . getF)
+  => Store (StateT (SSMap f) m) f
+testStore = Store
+  { sDeref = \p -> gets (lookup' p)
   , sUploadShallow = \x -> do
           let p = hash x
-          modify (\s -> updateF s . M.insert p x $ getF s)
+          modify (M.insert p x)
           pure p
   }
   where
@@ -36,3 +30,6 @@ testStore getF updateF = Store
     lookup' p h =
       let lr = M.lookup p h
        in fmap (fmap (Fix . Compose . (, Compose $ Nothing))) lr
+
+
+type SSMap f = Map (Hash f) (f (Hash f))
