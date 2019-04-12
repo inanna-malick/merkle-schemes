@@ -1,7 +1,7 @@
-name: hgit
+name: merkle-schemes
 version: 0.1.0.0
 synopsis: merkle all the things
-github: pkinsky/hgit
+github: pkinsky/merkle-schemes
 author: Paul Kinsky
 category: Development
 
@@ -66,28 +66,14 @@ library:
   source-dirs: src
   exposed-modules:
     - Data.Aeson.Orphans
-    - HGit.Core.Diff
-    - HGit.Core.Merge
-    - HGit.Core.Types
-    - HGit.Runtime.FileIO
-    - HGit.Runtime.Capabilities
-    - HGit.Runtime.Commands
-    - HGit.Runtime.Network
-    - HGit.Runtime.RunCmd
-    - HGit.Runtime.Types
     - Merkle.Functors
     - Merkle.Store
     - Merkle.Store.Deref
     - Merkle.Store.FileSystem
     - Merkle.Store.Network
+    - Merkle.Store.Test
     - Merkle.Types
     - Util.RecursionSchemes
-
-executable:
-  main: Main.hs
-  source-dirs: app
-  dependencies:
-    - hgit
 
 tests:
   spec:
@@ -98,6 +84,6 @@ tests:
     dependencies:
       - hedgehog
       - hspec
-      - hgit
+      - merkle-schemes
       - temporary
     build-tools: hspec-discover
