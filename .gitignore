@@ -4,6 +4,6 @@ cabal.sandbox.config
 tmp/*
 .stack-work/*
 
-hgit.cabal
+merkle-schemes.cabal
 
 .#*
