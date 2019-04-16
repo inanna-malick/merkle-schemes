@@ -41,5 +41,7 @@ cataM f = (>>= f) . traverse (cataM f) . unfix
 
 bitraverseFix
   :: (Bitraversable f, Monad m, Traversable (f a))
-  => (a -> m b) -> Fix (f a) -> m (Fix (f b))
+  => (a -> m b)
+  -> Fix (f a)
+  -> m (Fix (f b))
 bitraverseFix f = cataM (fmap Fix . bitraverse f pure)
