@@ -1,8 +1,9 @@
-module Merkle.Store.Test where
+module Merkle.Store.InMemory where
 
 --------------------------------------------
-import           Control.Monad.Trans.State.Lazy (StateT, gets, modify)
+import           Control.Monad.IO.Class
 import           Data.Functor.Compose
+import           Data.IORef
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 --------------------------------------------
@@ -11,18 +12,18 @@ import           Merkle.Store
 import           Merkle.Types
 --------------------------------------------
 
-testStore
+inMemoryStore
   :: forall m f
    . ( Hashable f
      , Functor f
-     , Monad m
+     , MonadIO m
      )
-  => Store (StateT (SSMap f) m) f
-testStore = Store
-  { sDeref = \p -> gets (lookup' p)
+  => IORef (SSMap f) -> Store m f
+inMemoryStore ior = Store
+  { sDeref = \p -> liftIO $ lookup' p <$> readIORef ior
   , sUploadShallow = \x -> do
           let p = hash x
-          modify (M.insert p x)
+          liftIO $ modifyIORef ior (M.insert p x)
           pure p
   }
   where

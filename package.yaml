@@ -14,23 +14,21 @@ default-extensions:
   - DeriveGeneric
   - DeriveTraversable
   - DataKinds
-  - DefaultSignatures
   - FlexibleContexts
   - FlexibleInstances
   - LambdaCase
-  - InstanceSigs
   - KindSignatures
   - NoStarIsType
   - OverloadedStrings
   - PolyKinds
   - RankNTypes
   - ScopedTypeVariables
-  - TupleSections
-  - TypeFamilies
   - StandaloneDeriving
   - TemplateHaskell
+  - TupleSections
   - TypeApplications
   - TypeOperators
+
 
 dependencies:
   - base >=4.8
@@ -70,8 +68,8 @@ library:
     - Merkle.Store
     - Merkle.Store.Deref
     - Merkle.Store.FileSystem
+    - Merkle.Store.InMemory
     - Merkle.Store.Network
-    - Merkle.Store.Test
     - Merkle.Types
     - Util.RecursionSchemes
 
@@ -84,6 +82,7 @@ tests:
     dependencies:
       - hedgehog
       - hspec
+      - hw-hspec-hedgehog
       - merkle-schemes
       - temporary
     build-tools: hspec-discover
