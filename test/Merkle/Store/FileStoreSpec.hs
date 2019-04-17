@@ -14,10 +14,15 @@ import           Merkle.Store.FileSystem
 --------------------------------------------
 
 spec :: Spec
-spec = describe "file system store" $ do
-  it "round trips recursive dir tree structures with max depth 5" $ do
+spec = describe "file system backed store" $ do
+  let testHarness g = do
+        -- use one shared hash-addressed store for all tests
+        -- if hash == , then content ==, so safe. Merkle!
+        withSystemTempDirectory "proptest" $ \ fspath ->
+              requireProperty $ storeTestDeep g $ fsStore fspath
 
-    -- use one shared hash-addressed store for all tests
-    -- if hash == , then content ==, so safe. Merkle!
-    withSystemTempDirectory "proptest" $ \ fspath ->
-          requireProperty $ storeTestDeep (genMockDirTree 5) $ fsStore fspath
+  it "round trips recursive dir tree structures with max depth 5" $
+    testHarness $ genMockDirTree 5
+
+  it "round trips recursive mock blockchain structures with constant depth 25" $
+    testHarness $ genMockBlockchain 25
