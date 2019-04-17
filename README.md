@@ -11,14 +11,11 @@ data Txn = Txn { from :: String, to :: String, amt :: Int }
 data BlockChainLayer a = Block [Txn] a | GenesisBlock
 ```
 
-We can then represent a blockchain with the fixed point of `BlockChain` using `Fix`
+We can then represent a blockchain as the fixed point of `BlockChain` using `Fix`
 ```
 newtype Fix = Fix { unFix :: f (Fix f) }
 
-type BlockChain = Fix BlockChainLayer
-
-
-blockchain :: BlockChain
+blockchain :: Fix BlockChain
 blockchain = 
   let previousBlock = Fix GenesisBlock
    in Fix $ Block [Txn "alice" "bob" 5] previousBlock
@@ -31,14 +28,13 @@ Because we've defined it with a type parameter `a` for the type of the pointer t
 
 ```
 type Hash = Int
-type ShallowBlockChainLayer = BlockChain Hash
 
-shallowBlockChainLayer :: ShallowBlockChainLayer
+shallowBlockChainLayer :: BlockChainLayer Hash
 shallowBlockChainLayer = 
   let previousBlockHash = 12345
    in Block [Txn "alice" "bob" 5] previousBlockHash
 
-hashlayer :: Shallowblockchainlayer -> Hash
+hashlayer :: BlockChainLayer Hash -> Hash
 hashlayer = undefined -- implemented in the repo
 ```
 
