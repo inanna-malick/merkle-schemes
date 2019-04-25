@@ -2,10 +2,11 @@ module Merkle.Store where
 
 --------------------------------------------
 import           Data.Functor.Compose
+import           Data.Functor.Const
 import           Data.Kind (Type)
 --------------------------------------------
 import           Merkle.Functors (HashAnnotated)
-import           Merkle.Types (Hash)
+import           Merkle.Types (Hash, RawHash)
 import           Util.RecursionSchemes
 --------------------------------------------
 
@@ -16,6 +17,38 @@ data Store m (f :: Type -> Type)
   { sDeref :: Hash f -> m (Maybe (DerefRes f))
   , sUploadShallow :: f (Hash f) -> m (Hash f)
   }
+
+data ShallowStore m (f :: Type -> Type)
+  = ShallowStore
+  { ssDeref :: Hash f -> m (Maybe (f (Hash f)))
+  , ssUploadShallow :: f (Hash f) -> m (Hash f)
+  }
+
+liftShallowStore :: forall m f. Monad m => Functor f => ShallowStore m f -> Store m f
+liftShallowStore (ShallowStore d u) = Store d' u
+  where
+    d' :: Hash f -> m (Maybe (DerefRes f))
+    d' h =
+        d h >>= \case
+          Nothing -> pure Nothing
+          Just x -> pure . Just $ fmap (\p' -> Fix $ Compose (p', Compose Nothing)) x
+
+data RawShallowStore m (f :: Type -> Type)
+  = RawShallowStore
+  { rssDeref :: RawHash -> m (Maybe (f RawHash))
+  , rssUploadShallow :: f RawHash -> m RawHash
+  }
+
+liftRawStore :: forall m f. Monad m => Functor f => RawShallowStore m f -> ShallowStore m f
+liftRawStore (RawShallowStore d u) = ShallowStore d' u'
+  where
+    u' f =
+      u (fmap getConst f) >>= pure . Const
+    d' (Const h) =
+        d h >>= \case
+          Nothing -> pure Nothing
+          Just x -> pure . Just $ fmap Const x
+
 
 -- technically store is now a semigroup
 -- TODO: write fallback vals to original cache! (or don't, it makes laziness more observable..)

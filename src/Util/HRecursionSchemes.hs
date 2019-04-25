@@ -101,6 +101,7 @@ instance HTraversable (Tagged x) where
 
 
 data HCompose f g e t = HC { getHC :: (f (g e) t) }
+infixr 7 `HCompose`
 
 -- getHC :: (f `HCompose` g) e t -> f (g e) t
 -- getHC (HC x) = x

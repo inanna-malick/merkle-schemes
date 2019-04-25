@@ -20,13 +20,6 @@ flatten
   => f (Term (Tagged Hash `HCompose` f)) :-> f Hash
 flatten = hfmap pointer
 
--- | Annotate each layer of some structure with its hash
-hashTag
-  :: HFunctor f
-  => Hashable f
-  => Term f :-> Term (Tagged Hash `HCompose` f)
-hashTag = annotate hash
-
 type Indirect = Compose Maybe
 
 -- | Make some fully substantiated hash tagged structure 'indirect'
