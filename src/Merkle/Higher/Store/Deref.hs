@@ -4,9 +4,9 @@ module Merkle.Higher.Store.Deref where
 import           Data.Functor.Compose
 --------------------------------------------
 import           Util.HRecursionSchemes
-import           Merkle.Functors
-import           Merkle.Store
-import           Merkle.Types
+import           Merkle.Higher.Functors
+import           Merkle.Higher.Store
+import           Merkle.Higher.Types
 --------------------------------------------
 
 -- | construct a potentially-infinite tree-shaped stream of further values constructed by
@@ -18,13 +18,7 @@ lazyDeref
   => HFunctor p
   => Store m p
   -> Hash :-> Term (Tagged Hash `HCompose` Lazy m `HCompose` p)
-lazyDeref store = futu alg
+lazyDeref store = ana alg
   where
-    alg :: CVCoalg (Tagged Hash `HCompose` Lazy m `HCompose` p) Hash
-    alg p = HC . Tagged p . HC . Compose $ hfmap (cata helper) <$> sDeref store p
-
-    helper :: Alg (Tagged Hash `HCompose` Indirect `HCompose` p)
-                  (Context (Tagged Hash `HCompose` Lazy m `HCompose` p) Hash)
-    helper (HC (Tagged p (HC (Compose Nothing)))) = Hole p
-    helper (HC (Tagged p (HC (Compose (Just x)))))
-      = Term . HC $ Tagged p $ (HC (Compose $ pure $ x))
+    alg :: Coalg (Tagged Hash `HCompose` Lazy m `HCompose` p) Hash
+    alg p = HC . Tagged p . HC . Compose $ sDeref store p

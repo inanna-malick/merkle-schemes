@@ -19,7 +19,6 @@ type UploadAPI f = "upload" :> ReqBody '[JSON] (f (Hash f)) :> Post '[JSON] (Has
 type StoreAPI f = DerefAPI f :<|> UploadAPI f
 
 
-
 -- TODO: use to implement hash-based sharding
 -- should only be a few lines, just make a node like this
 -- | Filesystem backed store using the provided dir

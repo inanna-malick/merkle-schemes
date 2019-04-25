@@ -59,6 +59,10 @@ dependencies:
   - transformers
   - vector
   - warp
+  - wreq
+  - lens-aeson
+  - lens
+  - base64-bytestring-type
 
 library:
   source-dirs: src

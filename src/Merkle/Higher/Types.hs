@@ -1,16 +1,22 @@
-module Merkle.Higher.Types
-  ( module Merkle.Higher.Types
-  , module Merkle.Types
-  ) where
+module Merkle.Higher.Types where
+  -- ( module Merkle.Higher.Types
+  -- ) where
 
 --------------------------------------------
+import qualified Data.Aeson as AE
+import           Data.Functor.Const (Const)
+import           GHC.Generics (Generic)
 import           Data.Kind (Type)
 --------------------------------------------
-import           Merkle.Types hiding (Hashable(hash))
+-- import           Merkle.Types hiding (Hashable(hash))
 import           Util.HRecursionSchemes (Alg)
 --------------------------------------------
 
-class Hashable (f :: (k -> Type) -> k -> Type) where
-  -- flatten a single layer of structure where all
-  -- sub-layers are hash pointers down to a hash
-  hash :: Alg f Hash
+-- string, compatible, 58 bit encoding - using string instead of bytestring for simplicity
+newtype IPFSHash = IPFSHash { unIPFSHash :: String } deriving Generic
+type Hash = Const IPFSHash
+
+
+instance AE.ToJSON IPFSHash
+
+instance AE.FromJSON IPFSHash
