@@ -19,6 +19,7 @@ $(singletons [d|
   data TorrentTag = ReleaseTag | MetaDataTag | TorrentTag | ChunkTag
  |])
 
+
 data BitTorrent a i where
   -- Release, eg some set of torrents representing different versions of some quote linux distro unquote
   Release :: a 'MetaDataTag -- release-level metadata
@@ -29,7 +30,7 @@ data BitTorrent a i where
   -- ASCII art commemorating the people who uploaded some file to comments on
   -- the video or audio quality provided by a quote linux distro unquote to
   -- a top-level description of a release
-  MetaData :: String -- String because these are unicode only
+  MetaData :: String -- unicode only (todo: Data.Text?)
            -> BitTorrent a 'MetaDataTag
 
   -- simple representation for dev work. Real BT uses pointers into a list of constant-size chunks

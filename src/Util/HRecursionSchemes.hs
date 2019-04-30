@@ -2,13 +2,19 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | A BUNCH OF SHIT STOLEN FROM COMPDATA + POLYKINDS/SING stuff from me, TODO UPSTREAM PR
 module Util.HRecursionSchemes where
 
+--------------------------------------------
 import           Data.Singletons
 import           Data.Functor.Compose
 import           Data.Kind (Type)
+import           Data.Singletons.TH
+--------------------------------------------
+
+
 
 type NatM m f g = forall i. SingI i => f i -> m (g i)
 
@@ -31,9 +37,11 @@ class HTraversable t where
 instance (Traversable f) => HTraversable (Compose f) where
   hmapM nat (Compose xs) = Compose <$> traverse nat xs
 
+$(singletons [d| data CxtType = WithHole | WithNoHole |])
+
 data Cxt h f a i where
     Term ::  f (Cxt h f a) i -> Cxt h f a i
-    Hole :: a i -> Cxt Hole f a i
+    Hole :: a i -> Cxt 'WithHole f a i
 
 unCxt :: f (Cxt h f a) :-> x
       -> a :-> x
@@ -41,12 +49,9 @@ unCxt :: f (Cxt h f a) :-> x
 unCxt f _ (Term x) = f x
 unCxt _ f (Hole x) = f x
 
-data Hole
-data NoHole
+type Context = Cxt 'WithHole
 
-type Context = Cxt Hole
-
-type Term f = Cxt NoHole f (K () ())
+type Term f = Cxt 'WithNoHole f (K () ())
 
 unTerm :: Term f t -> f (Term f) t
 unTerm (Term t) = t
