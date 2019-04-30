@@ -90,7 +90,7 @@ instance HTraversable BitTorrent where
 
 
 instance (SingI i, FromJSON x) => FromJSON (BitTorrent (Const x) i) where
-    parseJSON x = case sing @i of
+    parseJSON x = case (sing :: Sing i) of
           SChunkTag -> flip (withObject "chunk") x $ \o -> do
               c <- o .: "chunk"
               case Base64.decode (encodeUtf8 c) of

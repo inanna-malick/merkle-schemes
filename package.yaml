@@ -8,7 +8,6 @@ category: Development
 ghc-options: -Wall -Werror
 
 default-extensions:
-  - DerivingStrategies
   - DeriveFunctor
   - DeriveFoldable
   - DeriveGeneric
@@ -18,7 +17,6 @@ default-extensions:
   - FlexibleInstances
   - LambdaCase
   - KindSignatures
-  - NoStarIsType
   - OverloadedStrings
   - PolyKinds
   - RankNTypes
@@ -26,7 +24,6 @@ default-extensions:
   - StandaloneDeriving
   - TemplateHaskell
   - TupleSections
-  - TypeApplications
   - TypeOperators
 
 
