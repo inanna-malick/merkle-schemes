@@ -12,7 +12,7 @@ import           Data.Text
 -- IPFS: string, compatible, 58 bit encoding - using string instead of bytestring for simplicity
 newtype IPFSHash (f :: (k -> *) -> k -> *)
   = IPFSHash { unIPFSHash :: Text } deriving (Eq, Ord, Generic)
-type Hash f = Const (IPFSHash f)
+-- type Hash f = Const (IPFSHash f)
 
 instance AE.ToJSON (IPFSHash x) where
   toJSON = AE.String . unIPFSHash
@@ -21,4 +21,4 @@ instance AE.FromJSON (IPFSHash x) where
   parseJSON =
     AE.withText "RawHash" (pure . IPFSHash)
 
-type MerkleLayer f = f (Hash f)
+type MerkleLayer f = f (Const (IPFSHash f))

@@ -1,6 +1,7 @@
 module Merkle.Higher.Store.InMemory where
 
 --------------------------------------------
+import           Control.Applicative (Const(..))
 import           Control.Monad.IO.Class
 import           Data.IORef
 import           Data.Map.Strict (Map)
@@ -27,8 +28,8 @@ inMemoryStore iorSelector fallback = Store
           pure h
   }
   where
-    lookup' :: forall i. Hash f i -> SSMap f i -> Maybe (MerkleLayer f i)
+    lookup' :: forall i. Const (IPFSHash f) i -> SSMap f i -> Maybe (MerkleLayer f i)
     lookup' p h = M.lookup p h
 
 
-type SSMap f i = Map (Hash f i) (MerkleLayer f i)
+type SSMap f i = Map (Const (IPFSHash f) i) (MerkleLayer f i)
