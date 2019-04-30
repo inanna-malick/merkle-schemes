@@ -1,12 +1,10 @@
 module Merkle.Store.FileSystem where
 
 --------------------------------------------
+import           Control.Applicative (Const(..))
 import           Control.Exception.Safe (MonadThrow, throwString)
 import           Control.Monad.Except
 import qualified Data.Aeson as AE
-import qualified Data.Aeson.Encoding as AE (encodingToLazyByteString)
-import qualified Data.ByteString.Lazy as BL
-import           Data.Functor.Const
 import           Data.Text (unpack)
 import           System.Directory (doesFileExist)
 --------------------------------------------
@@ -40,9 +38,7 @@ fsStore root
 
   , ssUploadShallow = \x -> do
       let p = hash x
-      liftIO . BL.writeFile (root ++ "/" ++ fn p)
-             . AE.encodingToLazyByteString
-             . AE.toEncoding
+      liftIO . AE.encodeFile (root ++ "/" ++ fn p)
              $ HashTerm x
       pure p
   }

@@ -1,8 +1,8 @@
 module Merkle.Store where
 
 --------------------------------------------
+import           Control.Applicative (Const(..))
 import           Data.Functor.Compose
-import           Data.Functor.Const
 import           Data.Kind (Type)
 --------------------------------------------
 import           Merkle.Functors (HashAnnotated)
