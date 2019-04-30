@@ -5,6 +5,7 @@
 module Merkle.Higher.Store.IPFS where
 
 -- --------------------------------------------
+import           Control.Applicative (Const(..))
 import           Control.Exception.Safe
 import           Control.Lens
 import           Data.Aeson.Lens
@@ -41,7 +42,7 @@ getForHash
   :: SingI i
   => (forall i'. SingI i' => ByteString -> String `Either` MerkleLayer f i')
   -> IPFSNode
-  -> Hash f i
+  -> Const (IPFSHash f) i
   -> IO (MerkleLayer f i)
 getForHash decoder (IPFSNode host' port') (Const (IPFSHash h)) = do
     resp <- getWith opts path
@@ -60,7 +61,7 @@ putForHash
   => (forall i'. SingI i' => MerkleLayer f i' -> ByteString)
   -> IPFSNode
   -> MerkleLayer f i
-  -> IO (Hash f i)
+  -> IO (Const (IPFSHash f) i)
 putForHash encoder (IPFSNode host' port') fhi = do
     resp <- post path (partLBS "data" (encoder fhi))
     pure . Const . IPFSHash $ resp ^. responseBody . key "Key" . _String
