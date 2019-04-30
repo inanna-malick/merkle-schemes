@@ -8,7 +8,8 @@ module Merkle.Higher.BitTorrent where
 import           Data.Aeson
 import           Data.Functor.Const
 import           Data.ByteString (ByteString)
-import           Data.ByteString.Base64.Type
+import           Data.ByteString.Base64 as Base64
+import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
 import           Data.Singletons.TH
 --------------------------------------------
 import           Util.HRecursionSchemes -- YOLO 420 SHINY AND CHROME
@@ -86,11 +87,15 @@ instance HTraversable BitTorrent where
     torrents' <- traverse nat torrents
     pure $ Release md' torrents'
 
+
+
 instance (SingI i, FromJSON x) => FromJSON (BitTorrent (Const x) i) where
     parseJSON x = case sing @i of
           SChunkTag -> flip (withObject "chunk") x $ \o -> do
               c <- o .: "chunk"
-              pure $ Chunk $ getByteString64 c
+              case Base64.decode (encodeUtf8 c) of
+                Left err -> fail err
+                Right bs -> pure $ Chunk bs
 
           SMetaDataTag -> flip (withObject "metadata") x $ \o -> do
               m <- o .: "metadata"
@@ -110,7 +115,7 @@ instance (SingI i, FromJSON x) => FromJSON (BitTorrent (Const x) i) where
 
 instance (SingI i, ToJSON x) => ToJSON (BitTorrent (Const x) i) where
     toJSON (Chunk c)
-      = object ["chunk" .= makeByteString64 c] -- todo base64?
+      = object ["chunk" .= decodeLatin1 (Base64.encode c)]
     toJSON (MetaData m)
       = object ["metadata" .= m]
     toJSON (Torrent md chunks)

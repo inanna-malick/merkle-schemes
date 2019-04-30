@@ -35,6 +35,7 @@ dependencies:
   - aeson
   - aeson-pretty
   - base16-bytestring
+  - base64-bytestring
   - bifunctors
   - bytestring
   - containers
@@ -63,7 +64,6 @@ dependencies:
   - wreq
   - lens-aeson
   - lens
-  - base64-bytestring-type
 
 library:
   source-dirs: src
