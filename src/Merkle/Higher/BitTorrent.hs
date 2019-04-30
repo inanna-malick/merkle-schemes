@@ -8,39 +8,16 @@ module Merkle.Higher.BitTorrent where
 import           Data.Aeson
 import           Data.Functor.Const
 import           Data.ByteString (ByteString)
+import           Data.ByteString.Base64.Type
 import           Data.Singletons.TH
-import           GHC.Generics (Generic)
 --------------------------------------------
 import           Util.HRecursionSchemes -- YOLO 420 SHINY AND CHROME
 --------------------------------------------
-import Data.ByteString.Base64.Type
 
 
 $(singletons [d|
   data TorrentTag = ReleaseTag | MetaDataTag | TorrentTag | ChunkTag
  |])
-
-type FileName = FilePath
-type ChunkOffset = Int
-type ChunkIdx    = Int
-
-data Position = Position ChunkOffset ChunkIdx
-  deriving (Generic)
-
-instance ToJSON Position where
-  toEncoding = genericToEncoding defaultOptions
-instance FromJSON Position
-
-
--- constant-size chunk of bytes (last chunk can be between 1 and that many bytes)
-type Chunk = ByteString
-
-data ChunkRange = ChunkRange { from :: Position, to :: Position }
-  deriving (Generic)
-
-instance ToJSON ChunkRange where
-  toEncoding = genericToEncoding defaultOptions
-instance FromJSON ChunkRange
 
 data BitTorrent a i where
   -- Release, eg some set of torrents representing different versions of some quote linux distro unquote
@@ -55,25 +32,44 @@ data BitTorrent a i where
   MetaData :: String -- String because these are unicode only
            -> BitTorrent a 'MetaDataTag
 
-  -- list of chunks + filename-chunk mappings (allows for invalid states re same, can be validated)
-  -- Torrent' :: a 'MetaDataTag -- description of torrent contents, ascii art, etc
-  --          -> [(FileName, ChunkRange)] -- pointers into chunk list
-  --          -> [a 'ChunkTag] -- list of pointers to chunks
-  --          -> BitTorrent a 'TorrentTag
-
-  -- simple representation for dev work
+  -- simple representation for dev work. Real BT uses pointers into a list of constant-size chunks
   Torrent :: a 'MetaDataTag -- description of torrent contents, ascii art, etc
-          -> [(FileName, a 'ChunkTag)] -- files
+          -> [(FilePath, [a 'ChunkTag])] -- files, each being some number of chunks
           -> BitTorrent a 'TorrentTag
 
-  -- constant-size chunk (except for last chunk, which is [1, max] bytes)
-  Chunk :: Chunk -> BitTorrent a 'ChunkTag
+  -- chunk of bytes
+  Chunk :: ByteString -> BitTorrent a 'ChunkTag
+
+
+exampleRelease :: Term BitTorrent 'ReleaseTag
+exampleRelease
+  = Term $ Release (Term $ MetaData "test release")
+                   [exampleTorrent1, exampleTorrent2]
+
+
+exampleTorrent1 :: Term BitTorrent 'TorrentTag
+exampleTorrent1
+  = Term $ Torrent (Term $ MetaData "test torrent 1")
+            [ ("foo/bar.md", [ Term $ Chunk "file contents 1a"
+                             , Term $ Chunk "file contents 1b"
+                             ]
+              )
+            , ("foo.md", [Term $ Chunk "file contents 2"])
+            , ("baz.md", [Term $ Chunk "file contents 1"])
+            ]
+
+
+exampleTorrent2 :: Term BitTorrent 'TorrentTag
+exampleTorrent2
+  = Term $ Torrent (Term $ MetaData "test torrent 2")
+            [ ("warez.jk", [Term $ Chunk "deadbeef"])
+            ]
 
 
 instance HFunctor BitTorrent where
   hfmap _ (Chunk fc)        = Chunk fc
   hfmap _ (MetaData fc)        = MetaData fc
-  hfmap f (Torrent md chunks) = Torrent (f md) (fmap (fmap f) chunks)
+  hfmap f (Torrent md chunks) = Torrent (f md) (fmap (fmap (fmap f)) chunks)
   hfmap f (Release md torrents) = Release (f md) (fmap f torrents)
 
 -- half-impl'd defn
@@ -82,7 +78,7 @@ instance HTraversable BitTorrent where
   hmapM _ (MetaData fc) = pure $ MetaData fc
   hmapM nat (Torrent md chunks) = do
     md' <- nat md
-    chunks' <- traverse (traverse nat) chunks
+    chunks' <- traverse (traverse (traverse nat)) chunks
     pure $ Torrent md' chunks'
   hmapM nat (Release md torrents) = do
     md' <- nat md
@@ -90,7 +86,6 @@ instance HTraversable BitTorrent where
     pure $ Release md' torrents'
 
 instance (SingI i, FromJSON x) => FromJSON (BitTorrent (Const x) i) where
-    -- parseJSON :: forall i. Sing i => Value -> Parser (BitTorrent Hash i)
     parseJSON x = case sing @i of
           SChunkTag -> flip (withObject "chunk") x $ \o -> do
               c <- o .: "chunk"
