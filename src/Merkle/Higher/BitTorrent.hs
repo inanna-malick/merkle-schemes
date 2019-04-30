@@ -5,8 +5,8 @@
 module Merkle.Higher.BitTorrent where
 
 --------------------------------------------
+import           Control.Applicative (Const(..))
 import           Data.Aeson as AE
-import           Data.Functor.Const
 import           Data.ByteString (ByteString)
 import           Data.ByteString.Base64 as Base64
 import           Data.Text.Encoding (decodeLatin1, encodeUtf8)

@@ -1,6 +1,7 @@
 module Merkle.Types where
 
 --------------------------------------------
+import           Control.Applicative (Const(..))
 import qualified Crypto.Hash as CH
 import qualified Crypto.Hash.Algorithms as CHA
 import qualified Data.Aeson as AE
@@ -8,7 +9,6 @@ import qualified Data.ByteArray as BA
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
-import           Data.Functor.Const (Const(..))
 import           Data.Kind (Type)
 import           Data.Text (Text, unpack, pack)
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8)

@@ -3,8 +3,8 @@ module Merkle.Higher.Types where
   -- ) where
 
 --------------------------------------------
+import           Control.Applicative (Const)
 import qualified Data.Aeson as AE
-import           Data.Functor.Const (Const)
 import           GHC.Generics (Generic)
 import           Data.Kind (Type)
 import           Data.Text
