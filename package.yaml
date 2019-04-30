@@ -70,6 +70,10 @@ library:
   exposed-modules:
     - Data.Aeson.Orphans
     - Merkle.Functors
+    - Merkle.Higher.BitTorrent
+    - Merkle.Higher.IPFS
+    - Merkle.Higher.Store.Deref
+    - Merkle.Higher.Types
     - Merkle.Store
     - Merkle.Store.Deref
     - Merkle.Store.FileSystem
