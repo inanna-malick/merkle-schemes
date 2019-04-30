@@ -71,8 +71,9 @@ library:
     - Data.Aeson.Orphans
     - Merkle.Functors
     - Merkle.Higher.BitTorrent
-    - Merkle.Higher.IPFS
+    - Merkle.Higher.Store
     - Merkle.Higher.Store.Deref
+    - Merkle.Higher.Store.IPFS
     - Merkle.Higher.Types
     - Merkle.Store
     - Merkle.Store.Deref

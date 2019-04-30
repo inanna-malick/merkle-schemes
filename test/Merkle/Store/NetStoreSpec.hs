@@ -39,7 +39,7 @@ spec = describe "network store served over REST, backed by a file system store" 
           manager <- newManager defaultManagerSettings
           let env = mkClientEnv manager (BaseUrl Http "localhost" port "")
           let netStore' = liftStore (\mx -> liftIO (runClientM mx env) >>= either throw pure) netStore
-          bracket (liftIO . C.forkIO . Warp.run port $ app (fsStore netpath :: Store IO f))
+          bracket (liftIO . C.forkIO . Warp.run port $ app (liftShallowStore $ fsStore netpath :: Store IO f))
             C.killThread $ \_ -> do
               -- all this should work fine in parallel
               -- store is hash addressed, so no collisions should matter

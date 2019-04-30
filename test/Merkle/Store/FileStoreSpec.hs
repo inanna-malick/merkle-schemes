@@ -10,6 +10,7 @@ import           Test.Hspec
 import           Merkle.Store.TestUtils
 --------------------------------------------
 import           Data.Aeson.Orphans ()
+import           Merkle.Store
 import           Merkle.Store.FileSystem
 --------------------------------------------
 
@@ -19,7 +20,7 @@ spec = describe "file system backed store" $ do
         -- use one shared hash-addressed store for all tests
         -- if hash == , then content ==, so safe. Merkle!
         withSystemTempDirectory "proptest" $ \ fspath ->
-              requireProperty $ storeTestDeep g $ fsStore fspath
+              requireProperty $ storeTestDeep g $ liftShallowStore $ fsStore fspath
 
   it "round trips recursive dir tree structures with max depth 5" $
     testHarness $ genMockDirTree 5
