@@ -5,7 +5,7 @@
 module Merkle.Higher.BitTorrent where
 
 --------------------------------------------
-import           Data.Aeson
+import           Data.Aeson as AE
 import           Data.Functor.Const
 import           Data.ByteString (ByteString)
 import           Data.ByteString.Base64 as Base64
@@ -13,8 +13,9 @@ import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
 import           Data.Singletons.TH
 --------------------------------------------
 import           Util.HRecursionSchemes -- YOLO 420 SHINY AND CHROME
+import           Merkle.Higher.Store
+import           Merkle.Higher.Store.IPFS
 --------------------------------------------
-
 
 $(singletons [d|
   data TorrentTag = ReleaseTag | MetaDataTag | TorrentTag | ChunkTag
@@ -126,3 +127,11 @@ instance (SingI i, ToJSON x) => ToJSON (BitTorrent (Const x) i) where
       = object [ "metadata" .= md
                , "torrents" .= torrents
                ]
+
+
+
+ipfsBTStore
+  :: IPFSNode
+  -> Store IO BitTorrent
+ipfsBTStore node = ipfsStore AE.eitherDecode AE.encode node
+
