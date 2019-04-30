@@ -9,7 +9,6 @@ import qualified Data.ByteArray as BA
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
-import           Data.Kind (Type)
 import           Data.Text (Text, unpack, pack)
 import           Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import           Servant.API
@@ -17,7 +16,7 @@ import           Servant.API
 import           Util.RecursionSchemes (Algebra)
 --------------------------------------------
 
-class Hashable (f :: Type -> Type) where
+class Hashable (f :: * -> *) where
   -- flatten a single layer of structure where all
   -- sub-layers are hash pointers down to a hash
   hash :: Algebra f (Hash f)

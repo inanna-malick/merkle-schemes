@@ -3,7 +3,6 @@ module Merkle.Store where
 --------------------------------------------
 import           Control.Applicative (Const(..))
 import           Data.Functor.Compose
-import           Data.Kind (Type)
 --------------------------------------------
 import           Merkle.Functors (HashAnnotated)
 import           Merkle.Types (Hash, RawHash)
@@ -12,13 +11,13 @@ import           Util.RecursionSchemes
 
 type DerefRes f = f (Fix (HashAnnotated f `Compose` Maybe `Compose` f))
 
-data Store m (f :: Type -> Type)
+data Store m (f :: * -> *)
   = Store
   { sDeref :: Hash f -> m (Maybe (DerefRes f))
   , sUploadShallow :: f (Hash f) -> m (Hash f)
   }
 
-data ShallowStore m (f :: Type -> Type)
+data ShallowStore m (f :: * -> *)
   = ShallowStore
   { ssDeref :: Hash f -> m (Maybe (f (Hash f)))
   , ssUploadShallow :: f (Hash f) -> m (Hash f)
@@ -33,7 +32,7 @@ liftShallowStore (ShallowStore d u) = Store d' u
           Nothing -> pure Nothing
           Just x -> pure . Just $ fmap (\p' -> Fix $ Compose (p', Compose Nothing)) x
 
-data RawShallowStore m (f :: Type -> Type)
+data RawShallowStore m (f :: * -> *)
   = RawShallowStore
   { rssDeref :: RawHash -> m (Maybe (f RawHash))
   , rssUploadShallow :: f RawHash -> m RawHash
