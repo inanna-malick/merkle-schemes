@@ -9,7 +9,6 @@ module Util.HRecursionSchemes where
 --------------------------------------------
 import           Data.Singletons
 import           Data.Functor.Compose
-import           Data.Kind (Type)
 import           Data.Singletons.TH
 --------------------------------------------
 
@@ -20,7 +19,7 @@ type NatM m f g = forall i. SingI i => f i -> m (g i)
 type f :-> g = forall (i :: k) . SingI i => f i -> g i
 type f :=> a = forall (i :: k) . SingI i => f i -> a
 
-class HFunctor (h :: (k -> Type) -> k -> Type) where
+class HFunctor (h :: (k -> *) -> k -> *) where
     hfmap :: (f :-> g) -> h f :-> h g
 
 newtype K a h i = K { getK :: a}
