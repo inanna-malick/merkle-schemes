@@ -44,7 +44,6 @@ dependencies:
   - deriving-compat
   - free
   - http-client
-  - hedgehog
   - memory
   - mtl
   - unordered-containers
