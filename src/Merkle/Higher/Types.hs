@@ -11,7 +11,7 @@ import           Data.Text
 
 -- IPFS: string, compatible, 58 bit encoding - using string instead of bytestring for simplicity
 newtype IPFSHash (f :: (k -> *) -> k -> *)
-  = IPFSHash { unIPFSHash :: Text } deriving (Eq, Ord, Generic)
+  = IPFSHash { unIPFSHash :: Text } deriving (Eq, Ord, Show, Generic)
 -- type Hash f = Const (IPFSHash f)
 
 instance AE.ToJSON (IPFSHash x) where
