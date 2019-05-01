@@ -13,8 +13,6 @@ import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
 import           Data.Singletons.TH
 --------------------------------------------
 import           Util.HRecursionSchemes -- YOLO 420 SHINY AND CHROME
-import           Merkle.Higher.Store
-import           Merkle.Higher.Store.IPFS
 --------------------------------------------
 
 $(singletons [d|
@@ -127,11 +125,3 @@ instance (SingI i, ToJSON x) => ToJSON (BitTorrent (Const x) i) where
       = object [ "metadata" .= md
                , "torrents" .= torrents
                ]
-
-
-
-ipfsBTStore
-  :: IPFSNode
-  -> Store IO BitTorrent
-ipfsBTStore node = ipfsStore AE.eitherDecode AE.encode node
-

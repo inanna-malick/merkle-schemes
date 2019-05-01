@@ -33,14 +33,10 @@ dependencies:
   - base64-bytestring
   - bytestring
   - containers
-  - directory
   - free
-  - http-client
   - safe-exceptions
   - singletons
   - text
-  - warp
-  - wreq
   - lens-aeson
   - lens
 
@@ -50,6 +46,5 @@ library:
     - Merkle.Higher.BitTorrent
     - Merkle.Higher.Store
     - Merkle.Higher.Store.Deref
-    - Merkle.Higher.Store.IPFS
     - Merkle.Higher.Types
     - Util.HRecursionSchemes
