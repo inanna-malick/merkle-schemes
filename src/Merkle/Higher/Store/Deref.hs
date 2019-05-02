@@ -1,7 +1,6 @@
 module Merkle.Higher.Store.Deref where
 
 --------------------------------------------
-import           Control.Applicative (Const(..))
 import           Control.Exception.Safe (MonadThrow, throwString)
 import           Data.Functor.Compose
 --------------------------------------------
@@ -16,10 +15,10 @@ lazyDeref
   :: forall m f
    . (MonadThrow m, Monad m, HFunctor f)
   => Store m f
-  -> Const (IPFSHash f) :-> Term (Tagged (Const (IPFSHash f)) `HCompose` Compose m `HCompose` f)
+  -> Hash :-> Term (Tagged Hash `HCompose` Compose m `HCompose` f)
 lazyDeref store = ana alg
   where
-    alg :: Coalg (Tagged (Const (IPFSHash f)) `HCompose` Compose m `HCompose` f) (Const (IPFSHash f))
+    alg :: Coalg (Tagged Hash `HCompose` Compose m `HCompose` f) Hash
     -- todo: better error reporting, this is hax from latenite
     alg h = HC . Tagged h . HC . Compose $ get h
 
