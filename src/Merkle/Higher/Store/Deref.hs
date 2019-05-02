@@ -23,3 +23,9 @@ lazyDeref store = ana alg
     alg h = HC . Tagged h . HC . Compose $ get h
 
     get h = sGet store h >>= maybe (throwString "elem not found") pure
+
+deref
+  :: forall i f m
+   . Term (Tagged Hash `HCompose` Compose m `HCompose` f) i
+  -> m (f (Term (Tagged Hash `HCompose` Compose m `HCompose` f)) i)
+deref (Term (HC (Tagged _ (HC (Compose eff))))) = eff
