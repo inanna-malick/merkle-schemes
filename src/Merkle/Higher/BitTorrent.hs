@@ -28,7 +28,7 @@ data BitTorrent a i where
 
   -- simple representation for dev work. Real BT uses pointers into a list of constant-size chunks
   Torrent :: String -- description of torrent contents, ascii art, etc
-          -> [(FilePath, [a 'ChunkTag])] -- files, each being some number of chunks
+          -> [(FilePath, a 'ChunkTag)] -- files, each being a single chunk (simplification)
           -> BitTorrent a 'TorrentTag
 
   -- chunk of bytes
@@ -44,32 +44,34 @@ exampleRelease
 exampleTorrent1 :: Term BitTorrent 'TorrentTag
 exampleTorrent1
   = Term $ Torrent "test torrent 1"
-            [ ("foo/bar.md", [ Term $ Chunk "file contents 1a"
-                             , Term $ Chunk "file contents 1b"
-                             ]
-              )
-            , ("foo.md", [Term $ Chunk "file contents 2"])
-            , ("baz.md", [Term $ Chunk "file contents 1"])
+            [ ("foo/bar.md", Term $ Chunk "file contents 1")
+            , ("foo.md", Term $ Chunk "file contents 2")
+            , ("baz.md", Term $ Chunk "file contents 1")
             ]
 
 
 exampleTorrent2 :: Term BitTorrent 'TorrentTag
 exampleTorrent2
   = Term $ Torrent "test torrent 2"
-            [ ("warez.jk", [Term $ Chunk "deadbeef"])
+            [ ("warez.jk", Term $ Chunk "deadbeef")
             ]
+
+instance (Eq (a 'ChunkTag), Eq (a 'TorrentTag), Eq (a 'ReleaseTag)) => Eq (BitTorrent a i) where
+  Chunk b == Chunk b' = b == b'
+  Release s as == Release s' as' = s == s' && as == as'
+  Torrent s as == Torrent s' as' = s == s' && as == as'
 
 
 instance HFunctor BitTorrent where
   hfmap _ (Chunk fc)        = Chunk fc
-  hfmap f (Torrent md chunks) = Torrent md (fmap (fmap (fmap f)) chunks)
+  hfmap f (Torrent md chunks) = Torrent md (fmap (fmap f) chunks)
   hfmap f (Release md torrents) = Release md (fmap f torrents)
 
 -- half-impl'd defn
 instance HTraversable BitTorrent where
   hmapM _ (Chunk fc) = pure $ Chunk fc
   hmapM nat (Torrent md chunks) = do
-    chunks' <- traverse (traverse (traverse nat)) chunks
+    chunks' <- traverse (traverse nat) chunks
     pure $ Torrent md chunks'
   hmapM nat (Release md torrents) = do
     torrents' <- traverse nat torrents
