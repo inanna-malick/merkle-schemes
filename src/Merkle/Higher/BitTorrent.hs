@@ -9,32 +9,27 @@ import           Data.Aeson as AE
 import qualified Data.ByteString as B
 import           Data.ByteString (ByteString)
 import           Data.ByteString.Base64 as Base64
-import           Data.List.NonEmpty as NEL
+import           Data.Functor.Compose
 import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
 import           Data.Singletons.TH
 import           GHC.Generics
 --------------------------------------------
 import           Merkle.Higher.Types
+import           Merkle.Higher.Store.Deref
 import           Util.HRecursionSchemes -- YOLO 420 SHINY AND CHROME
 --------------------------------------------
 
-$(singletons [d|
-  data TorrentTag = ReleaseTag | TorrentTag | ChunkTag
- |])
-
-data Position = Position { pOffset :: Int, pIdx :: Int }
-  deriving (Eq, Ord, Show, Generic)
-
-instance ToJSON Position where
-  toEncoding = genericToEncoding defaultOptions
-instance FromJSON Position
-
-data ChunkRange = ChunkRange { crFrom :: Position, crTo :: Position }
+data ChunkRange = ChunkRange { crStart :: Int, crEnd :: Int }
   deriving (Eq, Ord, Show, Generic)
 
 instance ToJSON ChunkRange where
   toEncoding = genericToEncoding defaultOptions
 instance FromJSON ChunkRange
+
+
+$(singletons [d|
+  data TorrentTag = ReleaseTag | TorrentTag | ChunkTag
+ |])
 
 data BitTorrent a i where
   -- Release, eg some set of torrents representing different versions of some quote linux distro unquote
@@ -45,41 +40,62 @@ data BitTorrent a i where
   -- torrent, files are pointers into lists of chunks (consistient size)
   Torrent :: String -- description of torrent contents, ascii art, etc
           -> [(FilePath, ChunkRange)] -- pointers into chunk list
-          -> NonEmpty (a 'ChunkTag)   -- list of pointers to chunks
+          -> [(a 'ChunkTag)]          -- list of pointers to chunks
           -> BitTorrent a 'TorrentTag
 
   -- chunk of bytes
   Chunk :: ByteString -> BitTorrent a 'ChunkTag
 
 
--- todo: test a bunch, I guess?
+maxChunkSize :: Int
+maxChunkSize = 1024
+
+
+-- NOTE: needs actual tests, but I tested it in the repl and it works
+-- NOTE: probably because all the of by one errors balance eachother out
+getChunks
+  :: ChunkRange
+  -> BitTorrent (Term (Tagged Hash `HCompose` Compose IO `HCompose` BitTorrent)) 'TorrentTag
+  -> IO ByteString
+getChunks (ChunkRange start end) (Torrent _meta _pointers lazyChunks) = do
+    let firstChunk = start `div` maxChunkSize
+        lastChunk  = end `div` maxChunkSize
+    let firstChunkOffset = start `mod` maxChunkSize
+
+    chunks <- traverse deref (slice firstChunk lastChunk lazyChunks)
+
+    let megaChunk' = B.concat $ fmap (\(Chunk bs) -> bs) chunks
+        -- end - start should maybe be +1? like slice? but end is exclusive? lmao idk
+        megaChunk = B.take (end - start) $ B.drop firstChunkOffset megaChunk'
+
+    pure megaChunk
+
+  where
+    -- inefficient, etc etc #yolo (note: may have arithmetic errors all over the place here)
+    slice from' to' xs = take (to' - from' + 1) (drop from' xs)
+
+
 mkTorrent
   :: String
-  -> [(FilePath, ByteString)]
+  -> [(FilePath, ByteString)] -- TODO: upload as it goes, needed for v. big data examples
   -> Term BitTorrent 'TorrentTag
-mkTorrent meta files = Term $ Torrent meta pointers' chunks'' 
+mkTorrent meta files = Term $ Torrent meta pointers' chunks''
   where
-    maxChunkSize = 1024
+    splitMegaChunk bs
+      | B.length bs > 0 = [B.take maxChunkSize bs] ++ splitMegaChunk (B.drop maxChunkSize bs)
+      | otherwise = []
 
     chunks'' = fmap (Term . Chunk) chunks'
-    (chunks', pointers') = foldl f (("" :| []), []) files
+    chunks' = splitMegaChunk megachunk'
+    (megachunk', pointers', _lastPointer') = foldl f (B.empty, [], 0) files
 
-    f (chunks, pointers) (fp, bs)
-        -- no space in last chunk
-        | B.length (NEL.last chunks) >= maxChunkSize = _makeNewChunks
-        -- can fit entirely in last chunk
-        | B.length (NEL.last chunks) + B.length bs <= maxChunkSize =
-          let newChunkIdx = NEL.length - 1
-              newChunk = B.append (NEL.last chunks) bs
-              newChunks = newChunk :| (NEL.tail $ NEL.reverse chunks)
+    f (megachunk, pointers, lastPointer) (fp, bs) =
+          let lastPointer' = lastPointer + B.length bs -- for next chunk
               pointer = ChunkRange
-                      { crFrom =
-                      , crTo 
+                      { crStart = lastPointer               -- inclusive
+                      , crEnd   = lastPointer + B.length bs -- exclusive
                       }
-           in (newChunks, pointers ++ 
-
-        -- must be added to some combination of last chunk and this one
-        | otherwise = _appendAndMakeNewChunks
+           in (B.append megachunk bs, pointers ++ [(fp, pointer)], lastPointer')
 
 
 exampleRelease :: Term BitTorrent 'ReleaseTag
