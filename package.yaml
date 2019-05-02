@@ -78,6 +78,7 @@ library:
     - Merkle.Store.Network
     - Merkle.Types
     - Util.RecursionSchemes
+    - Util.HRecursionSchemes
 
 tests:
   spec:
