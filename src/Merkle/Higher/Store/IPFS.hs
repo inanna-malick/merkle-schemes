@@ -5,7 +5,6 @@
 module Merkle.Higher.Store.IPFS where
 
 -- --------------------------------------------
-import           Control.Applicative (Const(..))
 import           Control.Exception.Safe
 import           Control.Lens
 import           Data.Aeson.Lens
@@ -21,8 +20,8 @@ import           Merkle.Higher.Types
 ipfsStore
   :: forall f
   -- HAX TO AVOID QuantifiedConstraint (no ghcjs support)
-   . (forall i. SingI i => ByteString -> String `Either` MerkleLayer f i)
-  -> (forall i. SingI i => MerkleLayer f i -> ByteString)
+   . (forall i. SingI i => ByteString -> String `Either` f Hash i)
+  -> (forall i. SingI i => f Hash i -> ByteString)
   -> IPFSNode
   -> Store IO f
 ipfsStore decoder encoder node
@@ -40,11 +39,11 @@ localHost = IPFSNode "localhost" 5001
 
 getForHash
   :: SingI i
-  => (forall i'. SingI i' => ByteString -> String `Either` MerkleLayer f i')
+  => (forall i'. SingI i' => ByteString -> String `Either` f Hash i')
   -> IPFSNode
-  -> Const (IPFSHash f) i
-  -> IO (MerkleLayer f i)
-getForHash decoder (IPFSNode host' port') (Const (IPFSHash h)) = do
+  -> Hash i
+  -> IO (f Hash i)
+getForHash decoder (IPFSNode host' port') (Hash h) = do
     resp <- getWith opts path
     -- response type will not be json, to ipfs this is just a blob
     case decoder (resp ^. responseBody) of
@@ -58,12 +57,12 @@ getForHash decoder (IPFSNode host' port') (Const (IPFSHash h)) = do
 
 putForHash
   :: SingI i
-  => (forall i'. SingI i' => MerkleLayer f i' -> ByteString)
+  => (forall i'. SingI i' => f Hash i' -> ByteString)
   -> IPFSNode
-  -> MerkleLayer f i
-  -> IO (Const (IPFSHash f) i)
+  -> f Hash i
+  -> IO (Hash i)
 putForHash encoder (IPFSNode host' port') fhi = do
     resp <- post path (partLBS "data" (encoder fhi))
-    pure . Const . IPFSHash $ resp ^. responseBody . key "Key" . _String
+    pure . Hash $ resp ^. responseBody . key "Key" . _String
   where
     path = "http://" ++ host' ++ ":" ++ show port' ++ "/api/v0/block/put"
