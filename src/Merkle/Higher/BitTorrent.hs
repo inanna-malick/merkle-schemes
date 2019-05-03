@@ -15,6 +15,7 @@ import           Data.Singletons.TH
 import           GHC.Generics
 --------------------------------------------
 import           Merkle.Higher.Types
+import           Merkle.Higher.Store
 import           Merkle.Higher.Store.Deref
 import           Util.HRecursionSchemes -- YOLO 420 SHINY AND CHROME
 --------------------------------------------
@@ -26,24 +27,23 @@ instance ToJSON ChunkRange where
   toEncoding = genericToEncoding defaultOptions
 instance FromJSON ChunkRange
 
-
 $(singletons [d|
   data TorrentTag = ReleaseTag | TorrentTag | ChunkTag
  |])
 
 data BitTorrent a i where
-  -- Release, eg some set of torrents representing different versions of some quote linux distro unquote
+  -- | Release, some set of torrents with associated metadata
   Release :: String -- release-level metadata
           -> [a 'TorrentTag] -- torrents
           -> BitTorrent a 'ReleaseTag
 
-  -- torrent, files are pointers into lists of chunks (consistient size)
+  -- | torrent, files are pointers into lists of chunks
   Torrent :: String -- description of torrent contents, ascii art, etc
           -> [(FilePath, ChunkRange)] -- pointers into chunk list
           -> [(a 'ChunkTag)]          -- list of pointers to chunks
           -> BitTorrent a 'TorrentTag
 
-  -- chunk of bytes
+  -- | chunk of bytes
   Chunk :: ByteString -> BitTorrent a 'ChunkTag
 
 
@@ -74,7 +74,6 @@ getChunks (ChunkRange start end) (Torrent _meta _pointers lazyChunks) = do
     -- inefficient, etc etc #yolo (note: may have arithmetic errors all over the place here)
     slice from' to' xs = take (to' - from' + 1) (drop from' xs)
 
-
 mkTorrent
   :: String
   -> [(FilePath, ByteString)] -- TODO: upload as it goes, needed for v. big data examples
@@ -96,6 +95,46 @@ mkTorrent meta files = Term $ Torrent meta pointers' chunks''
                       , crEnd   = lastPointer + B.length bs -- exclusive
                       }
            in (B.append megachunk bs, pointers ++ [(fp, pointer)], lastPointer')
+
+-- haha holy crap it works (in repl tests with multiple chunks, todo is to write properties!)
+mkTorrentLazy
+  :: Monad m
+  => Store m BitTorrent
+  -> String
+  -> [m (FilePath, ByteString)] -- allows for lazy file read
+  -> m (BitTorrent Hash 'TorrentTag)
+mkTorrentLazy store meta files = do
+    -- TODO: idk, record?
+    (lastChunk, chunkPointers, pointers', _lastPointer')
+      <- foldl f (pure (B.empty, [], [], 0)) files
+
+    -- TODO: assert, last chunk should be <= max size
+    lastChunkPointer <- sPut store $ Chunk lastChunk
+    pure $ Torrent meta pointers' $ chunkPointers ++ [lastChunkPointer]
+  where
+    -- need to upload bit by bit, one file may be multiple chunks
+    splitMegaChunk bs
+      | B.length bs >= maxChunkSize = do
+          let chunk = B.take maxChunkSize bs
+          pointer <- sPut store $ Chunk chunk
+          (remainder, pointers) <- splitMegaChunk (B.drop maxChunkSize bs)
+          pure (remainder, pointer : pointers)
+      | otherwise = pure (bs, [])
+
+    f acc eff = do
+          (megachunk, chunkPointers, pointers, lastPointer) <- acc
+          (fp, bs) <- eff
+          let lastPointer' = lastPointer + B.length bs -- for next chunk
+              pointer = ChunkRange
+                      { crStart = lastPointer               -- inclusive
+                      , crEnd   = lastPointer + B.length bs -- exclusive
+                      }
+          (megachunk', chunkPointers') <- splitMegaChunk $ B.append megachunk bs
+          pure ( megachunk'
+               , chunkPointers ++ chunkPointers'
+               , pointers ++ [(fp, pointer)]
+               , lastPointer'
+               )
 
 
 exampleRelease :: Term BitTorrent 'ReleaseTag
