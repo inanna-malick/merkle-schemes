@@ -1,3 +1,6 @@
 resolver: lts-13.8
 packages:
-- .
+- merkle-schemes
+- merkle-schemes-higher
+- merkle-schemes-higher-bt
+- merkle-schemes-higher-ext

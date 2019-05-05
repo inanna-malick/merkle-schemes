@@ -1,0 +1,63 @@
+name: merkle-schemes-higher-ext
+version: 0.1.0.0
+synopsis: merkle all the things (higher kinded, exts)
+github: pkinsky/merkle-schemes
+author: Paul Kinsky
+category: Development
+
+ghc-options: -Wall -Werror
+
+default-extensions:
+  - DeriveFunctor
+  - DeriveFoldable
+  - DeriveGeneric
+  - DeriveTraversable
+  - DataKinds
+  - FlexibleContexts
+  - FlexibleInstances
+  - LambdaCase
+  - KindSignatures
+  - OverloadedStrings
+  - PolyKinds
+  - RankNTypes
+  - ScopedTypeVariables
+  - StandaloneDeriving
+  - TemplateHaskell
+  - TupleSections
+  - TypeOperators
+
+
+dependencies:
+  - base >=4.8
+  - aeson
+  - aeson-pretty
+  - bifunctors
+  - bytestring
+  - containers
+  - directory
+  - deriving-compat
+  - free
+  - http-client
+  - memory
+  - merkle-schemes-higher
+  - mtl
+  - pretty
+  - optparse-applicative
+  - random
+  - safe-exceptions
+  - servant
+  - servant-client
+  - servant-server
+  - singletons
+  - text
+  - transformers
+  - vector
+  - warp
+  - wreq
+  - lens-aeson
+  - lens
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - Merkle.Higher.Store.IPFS

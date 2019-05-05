@@ -10,6 +10,7 @@ import qualified Data.ByteString as B
 import           Data.ByteString (ByteString)
 import           Data.ByteString.Base64 as Base64
 import           Data.Functor.Compose
+import           Data.Text (Text)
 import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
 import           Data.Singletons.TH
 import           GHC.Generics
@@ -33,13 +34,13 @@ $(singletons [d|
 
 data BitTorrent a i where
   -- | Release, some set of torrents with associated metadata
-  Release :: String -- release-level metadata
+  Release :: Text -- release-level metadata
           -- named release subdirs or torrents
-          -> [(String, a 'TorrentTag `Either` a 'ReleaseTag)]
+          -> [(Text, a 'TorrentTag `Either` a 'ReleaseTag)]
           -> BitTorrent a 'ReleaseTag
 
   -- | torrent, files are pointers into lists of chunks
-  Torrent :: String -- description of torrent contents, ascii art, etc
+  Torrent :: Text -- description of torrent contents, ascii art, etc
           -> [(FilePath, ChunkRange)] -- pointers into chunk list
           -> [(a 'ChunkTag)]          -- list of pointers to chunks
           -> BitTorrent a 'TorrentTag
@@ -76,7 +77,7 @@ getChunks (ChunkRange start end) (Torrent _meta _pointers lazyChunks) = do
     slice from' to' xs = take (to' - from' + 1) (drop from' xs)
 
 mkTorrent
-  :: String
+  :: Text
   -> [(FilePath, ByteString)] -- TODO: upload as it goes, needed for v. big data examples
   -> Term BitTorrent 'TorrentTag
 mkTorrent meta files = Term $ Torrent meta pointers' chunks''
@@ -101,7 +102,7 @@ mkTorrent meta files = Term $ Torrent meta pointers' chunks''
 mkTorrentLazy
   :: Monad m
   => Store m BitTorrent
-  -> String
+  -> Text
   -> [m (FilePath, ByteString)] -- allows for lazy file read
   -> m (BitTorrent Hash 'TorrentTag)
 mkTorrentLazy store meta files = do
