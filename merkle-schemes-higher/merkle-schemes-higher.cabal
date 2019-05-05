@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 29ad9c4f7ec779063a42d9c45e23f495ed55d9049eca6b2b0fb070f564b2e0a8
+-- hash: 73e1ffb791532249bec052d5914fc4450030c9cc99a2a5d620ab083b07e5a504
 
 name:           merkle-schemes-higher
 version:        0.1.0.0
@@ -21,7 +21,6 @@ source-repository head
 
 library
   exposed-modules:
-      Merkle.Higher.BitTorrent
       Merkle.Higher.Store
       Merkle.Higher.Store.Deref
       Merkle.Higher.Types
