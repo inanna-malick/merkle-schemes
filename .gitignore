@@ -6,5 +6,6 @@ tmp/*
 */.stack-work/*
 
 */*.cabal
+*.cabal
 
 .#*

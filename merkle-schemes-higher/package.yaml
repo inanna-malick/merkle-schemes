@@ -30,36 +30,23 @@ default-extensions:
 dependencies:
   - base >=4.8
   - aeson
-  - aeson-pretty
   - base16-bytestring
   - base64-bytestring
   - bifunctors
   - bytestring
   - containers
-  - cryptonite
   - directory
   - deriving-compat
   - free
-  - http-client
   - memory
   - mtl
   - unordered-containers
   - pretty
-  - optparse-applicative
   - random
-  - recursion-schemes
   - safe-exceptions
-  - servant
-  - servant-client
-  - servant-server
   - singletons
   - text
   - transformers
-  - vector
-  - warp
-  - wreq
-  - lens-aeson
-  - lens
 
 
 library:
