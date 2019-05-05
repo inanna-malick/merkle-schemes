@@ -1,0 +1,44 @@
+name: merkle-schemes-higher-bt
+version: 0.1.0.0
+synopsis: merkle all the things
+github: pkinsky/merkle-schemes
+author: Paul Kinsky
+category: Development
+
+ghc-options: -Wall -Werror
+
+default-extensions:
+  - DeriveFunctor
+  - DeriveFoldable
+  - DeriveGeneric
+  - DeriveTraversable
+  - DataKinds
+  - FlexibleContexts
+  - FlexibleInstances
+  - LambdaCase
+  - KindSignatures
+  - OverloadedStrings
+  - PolyKinds
+  - RankNTypes
+  - ScopedTypeVariables
+  - StandaloneDeriving
+  - TemplateHaskell
+  - TupleSections
+  - TypeOperators
+
+
+dependencies:
+  - base >=4.8
+  - aeson
+  - base64-bytestring
+  - bytestring
+  - deriving-compat
+  - merkle-schemes-higher
+  - text
+  - singletons
+
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - Merkle.Higher.BitTorrent

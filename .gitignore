@@ -1,9 +1,9 @@
 dist/*
-cabal.sandbox.config
-.cabal-sandbox/*
+*/cabal.sandbox.config
+*.cabal-sandbox/*
 tmp/*
-.stack-work/*
+*.stack-work/*
 
-merkle-schemes.cabal
+*/*.cabal
 
 .#*
