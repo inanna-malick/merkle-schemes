@@ -3,6 +3,7 @@ dist/*
 *.cabal-sandbox/*
 tmp/*
 *.stack-work/*
+*/.stack-work/*
 
 */*.cabal
 
