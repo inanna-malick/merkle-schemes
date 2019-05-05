@@ -65,7 +65,6 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-    - Merkle.Higher.BitTorrent
     - Merkle.Higher.Store
     - Merkle.Higher.Store.Deref
     - Merkle.Higher.Types
