@@ -29,28 +29,51 @@ instance ToJSON ChunkRange where
 instance FromJSON ChunkRange
 
 $(singletons [d|
-  data TorrentTag = ReleaseTag | TorrentTag | ChunkTag
+  data TorrentTag = IndexedReleaseTag | ReleaseTag | TorrentTag | ChunkTag
  |])
 
 data BitTorrent a i where
+  -- top-level entry point, tuple of release and parent index
+  IndexedRelease
+    :: ParentIndex   -- list of pointers from releases/torrents to parents
+    -> a 'ReleaseTag -- actual release
+    -> BitTorrent a 'IndexedReleaseTag
+
   -- | Release, some set of torrents with associated metadata
-  Release :: Text -- release-level metadata
-          -- named release subdirs or torrents
-          -> [(Text, a 'TorrentTag `Either` a 'ReleaseTag)]
-          -> BitTorrent a 'ReleaseTag
+  Release
+    :: Text -- release-level metadata
+    -- named release subdirs or torrents
+    -> [(Text, a 'TorrentTag `Either` a 'ReleaseTag)]
+    -> BitTorrent a 'ReleaseTag
 
   -- | torrent, files are pointers into lists of chunks
-  Torrent :: Text -- description of torrent contents, ascii art, etc
-          -> [(FilePath, ChunkRange)] -- pointers into chunk list
-          -> [(a 'ChunkTag)]          -- list of pointers to chunks
-          -> BitTorrent a 'TorrentTag
+  Torrent
+    :: Text -- description of torrent contents, ascii art, etc
+    -> [(FilePath, ChunkRange)] -- pointers into chunk list
+    -> [(a 'ChunkTag)]          -- list of pointers to chunks
+    -> BitTorrent a 'TorrentTag
 
   -- | chunk of bytes
-  Chunk :: ByteString -> BitTorrent a 'ChunkTag
+  Chunk
+    :: ByteString
+    -> BitTorrent a 'ChunkTag
 
 
 maxChunkSize :: Int
 maxChunkSize = 1024
+
+
+data ParentIndex
+  = ParentIndex
+  { torrentParents :: [(Hash 'TorrentTag, [Hash 'ReleaseTag])]
+  , releaseParents :: [(Hash 'ReleaseTag, [Hash 'ReleaseTag])]
+  }
+  deriving (Eq, Ord, Show, Generic)
+
+instance ToJSON ParentIndex where
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON ParentIndex
+
 
 
 -- NOTE: needs actual tests, but I tested it in the repl and it works
@@ -138,7 +161,6 @@ mkTorrentLazy store meta files = do
                , lastPointer'
                )
 
-
 exampleRelease :: Term BitTorrent 'ReleaseTag
 exampleRelease
   = Term $ Release "test release"
@@ -157,14 +179,16 @@ exampleTorrent2 = mkTorrent "test torrent 2"
 
 instance (Eq (a 'ChunkTag), Eq (a 'TorrentTag), Eq (a 'ReleaseTag)) => Eq (BitTorrent a i) where
   Chunk b == Chunk b' = b == b'
-  Release s as == Release s' as' = s == s' && as == as'
   Torrent s ps as == Torrent s' ps' as' = s == s' && as == as' && ps == ps'
+  Release s as == Release s' as' = s == s' && as == as'
+  IndexedRelease i r == IndexedRelease i' r' = i == i' && r == r'
 
 
 instance HFunctor BitTorrent where
   hfmap _ (Chunk fc)        = Chunk fc
   hfmap f (Torrent md ps chunks) = Torrent md ps (fmap f chunks)
   hfmap f (Release md torrents) = Release md (fmap (fmap (either (Left . f) (Right . f))) torrents)
+  hfmap f (IndexedRelease i r) = IndexedRelease i (f r)
 
 -- half-impl'd defn
 instance HTraversable BitTorrent where
@@ -175,6 +199,9 @@ instance HTraversable BitTorrent where
   hmapM nat (Release md torrents) = do
     torrents' <- traverse (traverse (either (fmap Left . nat) (fmap Right . nat))) torrents
     pure $ Release md torrents'
+  hmapM nat (IndexedRelease i r) = do
+    r' <- nat r
+    pure $ IndexedRelease i r'
 
 instance SingI i => FromJSON (BitTorrent Hash i) where
     parseJSON x = case (sing :: Sing i) of
@@ -192,9 +219,13 @@ instance SingI i => FromJSON (BitTorrent Hash i) where
 
           SReleaseTag -> flip (withObject "release") x $ \o -> do
               m <- o .: "metadata"
-              torrents <- o .: "torrents"
+              torrents <- o .: "torrents" -- new name - torrents + releases.. contents?
               pure $ Release m torrents
 
+          SIndexedReleaseTag -> flip (withObject "indexed release") x $ \o -> do
+              i <- o .: "index"
+              r <- o .: "release"
+              pure $ IndexedRelease i r
 
 
 instance SingI i => ToJSON (BitTorrent Hash i) where
@@ -209,3 +240,8 @@ instance SingI i => ToJSON (BitTorrent Hash i) where
       = object [ "metadata" .= md
                , "torrents" .= torrents
                ]
+    toJSON (IndexedRelease i r)
+      = object [ "index" .= i
+               , "release" .= r
+               ]
+
