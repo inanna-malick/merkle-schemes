@@ -9,6 +9,7 @@ import           Control.Exception.Safe
 import           Control.Lens
 import           Data.Aeson.Lens
 import           Data.ByteString.Lazy.Internal (ByteString)
+import           Data.Char (toLower)
 import           Data.Singletons
 import           Network.Wreq
 -- --------------------------------------------
@@ -24,9 +25,19 @@ ipfsStore
   -> (forall i. SingI i => f Hash i -> ByteString)
   -> IPFSNode
   -> Store IO f
-ipfsStore decoder encoder node
+ipfsStore decoder encoder = ipfsStore' decoder encoder False
+
+ipfsStore'
+  :: forall f
+  -- HAX TO AVOID QuantifiedConstraint (no ghcjs support)
+   . (forall i. SingI i => ByteString -> String `Either` f Hash i)
+  -> (forall i. SingI i => f Hash i -> ByteString)
+  -> Bool -- controls pinning of blobs pushed to store
+  -> IPFSNode
+  -> Store IO f
+ipfsStore' decoder encoder pin node
   = Store (fmap Just . getForHash decoder node)
-          (putForHash encoder node)
+          (putForHash encoder pin node)
 
 data IPFSNode
   = IPFSNode
@@ -58,11 +69,13 @@ getForHash decoder (IPFSNode host' port') (Hash h) = do
 putForHash
   :: SingI i
   => (forall i'. SingI i' => f Hash i' -> ByteString)
+  -> Bool -- controls pinning
   -> IPFSNode
   -> f Hash i
   -> IO (Hash i)
-putForHash encoder (IPFSNode host' port') fhi = do
+putForHash encoder pin (IPFSNode host' port') fhi = do
     resp <- post path (partLBS "data" (encoder fhi))
     pure . Hash $ resp ^. responseBody . key "Key" . _String
   where
-    path = "http://" ++ host' ++ ":" ++ show port' ++ "/api/v0/block/put"
+    path = "http://" ++ host' ++ ":" ++ show port' ++ "/api/v0/block/put?pin=" ++ pin'
+    pin' = toLower <$> show pin
