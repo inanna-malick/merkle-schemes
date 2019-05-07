@@ -29,16 +29,10 @@ instance ToJSON ChunkRange where
 instance FromJSON ChunkRange
 
 $(singletons [d|
-  data TorrentTag = IndexedReleaseTag | ReleaseTag | TorrentTag | ChunkTag
+  data TorrentTag = ReleaseTag | TorrentTag | ChunkTag
  |])
 
 data BitTorrent a i where
-  -- top-level entry point, tuple of release and parent index
-  IndexedRelease
-    :: ParentIndex   -- list of pointers from releases/torrents to parents
-    -> a 'ReleaseTag -- actual release
-    -> BitTorrent a 'IndexedReleaseTag
-
   -- | Release, some set of torrents with associated metadata
   Release
     :: Text -- release-level metadata
@@ -61,19 +55,6 @@ data BitTorrent a i where
 
 maxChunkSize :: Int
 maxChunkSize = 1024
-
-
-data ParentIndex
-  = ParentIndex
-  { torrentParents :: [(Hash 'TorrentTag, [Hash 'ReleaseTag])]
-  , releaseParents :: [(Hash 'ReleaseTag, [Hash 'ReleaseTag])]
-  }
-  deriving (Eq, Ord, Show, Generic)
-
-instance ToJSON ParentIndex where
-  toEncoding = genericToEncoding defaultOptions
-instance FromJSON ParentIndex
-
 
 
 -- NOTE: needs actual tests, but I tested it in the repl and it works
@@ -181,14 +162,12 @@ instance (Eq (a 'ChunkTag), Eq (a 'TorrentTag), Eq (a 'ReleaseTag)) => Eq (BitTo
   Chunk b == Chunk b' = b == b'
   Torrent s ps as == Torrent s' ps' as' = s == s' && as == as' && ps == ps'
   Release s as == Release s' as' = s == s' && as == as'
-  IndexedRelease i r == IndexedRelease i' r' = i == i' && r == r'
 
 
 instance HFunctor BitTorrent where
   hfmap _ (Chunk fc)        = Chunk fc
   hfmap f (Torrent md ps chunks) = Torrent md ps (fmap f chunks)
   hfmap f (Release md torrents) = Release md (fmap (fmap (either (Left . f) (Right . f))) torrents)
-  hfmap f (IndexedRelease i r) = IndexedRelease i (f r)
 
 -- half-impl'd defn
 instance HTraversable BitTorrent where
@@ -199,9 +178,6 @@ instance HTraversable BitTorrent where
   hmapM nat (Release md torrents) = do
     torrents' <- traverse (traverse (either (fmap Left . nat) (fmap Right . nat))) torrents
     pure $ Release md torrents'
-  hmapM nat (IndexedRelease i r) = do
-    r' <- nat r
-    pure $ IndexedRelease i r'
 
 instance SingI i => FromJSON (BitTorrent Hash i) where
     parseJSON x = case (sing :: Sing i) of
@@ -222,15 +198,11 @@ instance SingI i => FromJSON (BitTorrent Hash i) where
               torrents <- o .: "torrents" -- new name - torrents + releases.. contents?
               pure $ Release m torrents
 
-          SIndexedReleaseTag -> flip (withObject "indexed release") x $ \o -> do
-              i <- o .: "index"
-              r <- o .: "release"
-              pure $ IndexedRelease i r
-
 
 instance SingI i => ToJSON (BitTorrent Hash i) where
     toJSON (Chunk c)
-      = object ["chunk" .= decodeLatin1 (Base64.encode c)]
+      = object [ "chunk" .= decodeLatin1 (Base64.encode c)
+               ]
     toJSON (Torrent md pointers chunks)
       = object [ "metadata" .= md
                , "pointers" .= pointers
@@ -240,8 +212,3 @@ instance SingI i => ToJSON (BitTorrent Hash i) where
       = object [ "metadata" .= md
                , "torrents" .= torrents
                ]
-    toJSON (IndexedRelease i r)
-      = object [ "index" .= i
-               , "release" .= r
-               ]
-
