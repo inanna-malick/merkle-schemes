@@ -69,8 +69,6 @@ putForHash
   -> IO (Hash i)
 putForHash (IPFSNode host' port') fhi = do
     let obj = DagNode fhi $ extractHashKeys fhi
-    putStrLn "sending obj to ipfs"
-    print $ encode obj
     resp <- post path (partLBS "data" $ encode obj)
     pure . Hash $ resp ^. responseBody . key "Hash" . _String
   where
