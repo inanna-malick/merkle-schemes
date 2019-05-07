@@ -31,6 +31,7 @@ dependencies:
   - base >=4.8
   - aeson
   - aeson-pretty
+  - base64-bytestring
   - bifunctors
   - bytestring
   - containers
