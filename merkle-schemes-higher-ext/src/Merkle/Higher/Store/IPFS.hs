@@ -37,7 +37,7 @@ data IPFSNode
   }
 
 localHost :: IPFSNode
-localHost = IPFSNode "localhost" 5001
+localHost = IPFSNode "http://localhost" 5001
 
 getForHash
   :: ( SingI i
@@ -55,7 +55,7 @@ getForHash (IPFSNode host' port') (Hash h) = do
 
   where
     opts = defaults & param "arg" .~ [h]
-    path = "http://" ++ host' ++ ":" ++ show port' ++ "/api/v0/object/get"
+    path = host' ++ ":" ++ show port' ++ "/api/v0/object/get"
 
 
 putForHash
@@ -72,5 +72,5 @@ putForHash (IPFSNode host' port') fhi = do
     resp <- post path (partLBS "data" $ encode obj)
     pure . Hash $ resp ^. responseBody . key "Hash" . _String
   where
-    path = "http://" ++ host' ++ ":" ++ show port' ++ "/api/v0/object/put?datafieldenc=base64"
+    path = host' ++ ":" ++ show port' ++ "/api/v0/object/put?datafieldenc=base64"
 
