@@ -68,7 +68,7 @@ putForHash
 putForHash (IPFSNode host' port') fhi = do
     let obj = DagNode $ fhi
     resp <- post path (partLBS "data" $ encode obj)
-    pure . Hash $ resp ^. responseBody . key "Key" . _String
+    pure . Hash $ resp ^. responseBody . key "Hash" . _String
   where
     path = "http://" ++ host' ++ ":" ++ show port' ++ "/api/v0/object/put?datafieldenc=base64"
 
