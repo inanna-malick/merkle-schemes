@@ -20,24 +20,29 @@ instance FromJSON (Hash x) where
   parseJSON =
     withText "RawHash" (pure . Hash)
 
-
+-- | For use with IPFS links (so only top-level element need be pinned)
+class ExtractKeys f where
+  extractHashKeys :: f Hash i -> [Text]
 
 data DagNode a
   = DagNode
   { dnValue :: a
-  -- TODO: links? skipping for now
+  , dnLinks :: [Text] -- raw hashes only
   }
 
 instance FromJSON x => FromJSON (DagNode x) where
     parseJSON = withObject "dag node" $ \o -> do
               d <- o .: "Data"
+              ls <- o .: "Links"
               case Base64.decode (encodeUtf8 d) >>= eitherDecode . LB.fromStrict of
                 Left err -> fail err
-                Right x  -> pure $ DagNode x
+                Right x  -> pure $ DagNode x ls
 
 instance ToJSON x => ToJSON (DagNode x) where
-    toJSON (DagNode x)
+    toJSON (DagNode x ls)
       = object [ "Data" .= decodeLatin1 (Base64.encode $ LB.toStrict $ encode x)
-               -- add this because it may be req'd for parsing (FIXME)
-               , "Links" .= ([] :: [Int]) -- TODO actual links encoding (not sure how to get size here..)
+               , "Links" .= fmap (\t -> object ["Name" .= t
+                                          , "Hash" .= t
+                                          -- TODO: figure out how to get actual size here
+                                          ]) ls
                ]

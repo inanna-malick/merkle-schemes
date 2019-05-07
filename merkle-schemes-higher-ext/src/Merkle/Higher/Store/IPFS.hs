@@ -22,6 +22,7 @@ ipfsStore
   :: forall f
    . ( forall i. SingI i => FromJSON (f Hash i)
      , forall i. SingI i => ToJSON   (f Hash i)
+     , ExtractKeys f -- for linking obj graph together (weak foldable, kinda)
      )
   => IPFSNode
   -> Store IO f
@@ -50,7 +51,7 @@ getForHash (IPFSNode host' port') (Hash h) = do
     -- response type will not be json, to ipfs this is just a blob
     case eitherDecode (resp ^. responseBody) of
       Left err  -> throwM (JSONError err)
-      Right (DagNode val) -> pure val
+      Right (DagNode val _ls) -> pure val
 
   where
     opts = defaults & param "arg" .~ [h]
@@ -61,12 +62,13 @@ putForHash
   :: forall i f
    . ( SingI i
      , forall i'. SingI i' => ToJSON (f Hash i')
+     , ExtractKeys f
      )
   => IPFSNode
   -> f Hash i
   -> IO (Hash i)
 putForHash (IPFSNode host' port') fhi = do
-    let obj = DagNode $ fhi
+    let obj = DagNode fhi $ extractHashKeys fhi
     resp <- post path (partLBS "data" $ encode obj)
     pure . Hash $ resp ^. responseBody . key "Hash" . _String
   where
