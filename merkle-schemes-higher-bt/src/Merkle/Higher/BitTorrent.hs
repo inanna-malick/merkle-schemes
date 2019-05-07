@@ -53,9 +53,13 @@ data BitTorrent a i where
     -> BitTorrent a 'ChunkTag
 
 
+instance ExtractKeys BitTorrent where
+  extractHashKeys (Chunk _) = []
+  extractHashKeys (Torrent _ _ cs) = fmap unHash cs
+  extractHashKeys (Release _ xs) = fmap (either unHash unHash . snd) xs
+
 maxChunkSize :: Int
 maxChunkSize = 1024
-
 
 -- NOTE: needs actual tests, but I tested it in the repl and it works
 -- NOTE: probably because all the of by one errors balance eachother out
