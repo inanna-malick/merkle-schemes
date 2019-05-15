@@ -1,6 +1,6 @@
 { mkDerivation, aeson, base, base16-bytestring, base64-bytestring
 , bifunctors, bytestring, containers, deriving-compat, directory
-, free, hpack, memory, mtl, pretty, random, safe-exceptions
+, free, memory, mtl, pretty, random, safe-exceptions
 , singletons, stdenv, text, transformers, unordered-containers
 }:
 mkDerivation {
@@ -13,8 +13,6 @@ mkDerivation {
     random safe-exceptions singletons text
     unordered-containers
   ];
-  libraryToolDepends = [ hpack ];
-  preConfigure = "hpack";
   homepage = "https://github.com/pkinsky/merkle-schemes#readme";
   description = "merkle all the things";
   license = "unknown";
