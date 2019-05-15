@@ -1,0 +1,128 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.1.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: e33a0caef6c8314c27047d48a27131d4bf268d0463ea8691db96464f06aa3e1e
+
+name:           merkle-schemes
+version:        0.1.0.0
+synopsis:       merkle all the things
+category:       Development
+homepage:       https://github.com/pkinsky/merkle-schemes#readme
+bug-reports:    https://github.com/pkinsky/merkle-schemes/issues
+author:         Paul Kinsky
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/pkinsky/merkle-schemes
+
+library
+  exposed-modules:
+      Data.Aeson.Orphans
+      Merkle.Functors
+      Merkle.Store
+      Merkle.Store.Deref
+      Merkle.Store.FileSystem
+      Merkle.Store.InMemory
+      Merkle.Store.Network
+      Merkle.Types
+      Util.RecursionSchemes
+  other-modules:
+      Paths_merkle_schemes
+  hs-source-dirs:
+      src
+  default-extensions: DeriveFunctor DeriveFoldable DeriveGeneric DeriveTraversable DataKinds FlexibleContexts FlexibleInstances LambdaCase KindSignatures OverloadedStrings PolyKinds RankNTypes ScopedTypeVariables StandaloneDeriving TemplateHaskell TupleSections TypeOperators
+  ghc-options: -Wall -Werror
+  build-depends:
+      aeson
+    , aeson-pretty
+    , base >=4.8
+    , base16-bytestring
+    , base64-bytestring
+    , bifunctors
+    , bytestring
+    , containers
+    , cryptonite
+    , deriving-compat
+    , directory
+    , free
+    , http-client
+    , lens
+    , lens-aeson
+    , memory
+    , mtl
+    , optparse-applicative
+    , pretty
+    , random
+    , recursion-schemes
+    , safe-exceptions
+    , servant
+    , servant-client
+    , servant-server
+    , singletons
+    , text
+    , transformers
+    , unordered-containers
+    , vector
+    , warp
+    , wreq
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Merkle.Store.FileStoreSpec
+      Merkle.Store.InMemoryStoreSpec
+      Merkle.Store.NetStoreSpec
+      Merkle.Store.TestUtils
+      Paths_merkle_schemes
+  hs-source-dirs:
+      test
+  default-extensions: DeriveFunctor DeriveFoldable DeriveGeneric DeriveTraversable DataKinds FlexibleContexts FlexibleInstances LambdaCase KindSignatures OverloadedStrings PolyKinds RankNTypes ScopedTypeVariables StandaloneDeriving TemplateHaskell TupleSections TypeOperators
+  ghc-options: -Wall -Werror
+  cpp-options: -DTEST
+  build-tool-depends:
+      hspec-discover:hspec-discover
+  build-depends:
+      aeson
+    , aeson-pretty
+    , base >=4.8
+    , base16-bytestring
+    , base64-bytestring
+    , bifunctors
+    , bytestring
+    , containers
+    , cryptonite
+    , deriving-compat
+    , directory
+    , free
+    , hedgehog
+    , hspec
+    , http-client
+    , hw-hspec-hedgehog
+    , lens
+    , lens-aeson
+    , memory
+    , merkle-schemes
+    , mtl
+    , optparse-applicative
+    , pretty
+    , random
+    , recursion-schemes
+    , safe-exceptions
+    , servant
+    , servant-client
+    , servant-server
+    , singletons
+    , temporary
+    , text
+    , transformers
+    , unordered-containers
+    , vector
+    , warp
+    , wreq
+  default-language: Haskell2010

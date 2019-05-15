@@ -1,0 +1,40 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.1.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: bf6c604021c3c72ccd2a6a7112e481e5d190186cc35988684253988cab57db4c
+
+name:           merkle-schemes-higher-bt
+version:        0.1.0.0
+synopsis:       merkle all the things
+category:       Development
+homepage:       https://github.com/pkinsky/merkle-schemes#readme
+bug-reports:    https://github.com/pkinsky/merkle-schemes/issues
+author:         Paul Kinsky
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/pkinsky/merkle-schemes
+
+library
+  exposed-modules:
+      Merkle.Higher.BitTorrent
+  other-modules:
+      Paths_merkle_schemes_higher_bt
+  hs-source-dirs:
+      src
+  default-extensions: DeriveFunctor DeriveFoldable DeriveGeneric DeriveTraversable DataKinds FlexibleContexts FlexibleInstances LambdaCase KindSignatures OverloadedStrings PolyKinds RankNTypes ScopedTypeVariables StandaloneDeriving TemplateHaskell TupleSections TypeOperators
+  ghc-options: -Wall -Werror
+  build-depends:
+      aeson
+    , base >=4.8
+    , base64-bytestring
+    , bytestring
+    , deriving-compat
+    , merkle-schemes-higher
+    , singletons
+    , text
+  default-language: Haskell2010
