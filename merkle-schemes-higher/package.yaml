@@ -30,23 +30,14 @@ default-extensions:
 dependencies:
   - base >=4.8
   - aeson
-  - base16-bytestring
   - base64-bytestring
-  - bifunctors
   - bytestring
   - containers
-  - directory
   - deriving-compat
-  - free
-  - memory
-  - mtl
   - unordered-containers
-  - pretty
-  - random
   - safe-exceptions
   - singletons
   - text
-  - transformers
 
 
 library:
