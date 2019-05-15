@@ -1,5 +1,5 @@
 { mkDerivation, aeson, aeson-pretty, base, bifunctors, bytestring
-, containers, deriving-compat, directory, free, hpack, http-client
+, containers, deriving-compat, directory, free, http-client
 , lens, lens-aeson, memory, merkle-schemes-higher, mtl
 , optparse-applicative, pretty, random, safe-exceptions, servant
 , servant-client, servant-server, singletons, stdenv, text
@@ -16,8 +16,6 @@ mkDerivation {
     safe-exceptions servant servant-client servant-server singletons
     text transformers vector warp wreq
   ];
-  libraryToolDepends = [ hpack ];
-  preConfigure = "hpack";
   homepage = "https://github.com/pkinsky/merkle-schemes#readme";
   description = "merkle all the things (higher kinded, exts)";
   license = "unknown";
