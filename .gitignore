@@ -5,7 +5,4 @@ tmp/*
 *.stack-work/*
 */.stack-work/*
 
-*/*.cabal
-*.cabal
-
 .#*
