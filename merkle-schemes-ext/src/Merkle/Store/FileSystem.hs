@@ -10,6 +10,7 @@ import           System.Directory (doesFileExist)
 --------------------------------------------
 import           Merkle.Store
 import           Merkle.Types
+import           Merkle.Types.BlakeHash
 --------------------------------------------
 
 -- | Filesystem backed store using the provided dir
@@ -18,15 +19,15 @@ fsStore
    . ( MonadIO m
      , MonadThrow m
      , Functor f
-     , Hashable f
+     , Hashable RawBlakeHash f
      , AE.ToJSON1   f
      , AE.FromJSON1 f
      )
   => FilePath
-  -> ShallowStore m f
+  -> ShallowStore m RawBlakeHash f
 fsStore root
-  = ShallowStore
-  { ssDeref = \p -> do
+  =
+  ( GetCapabilityShallow $ \p -> do
       let fp = root ++ "/" ++ fn p
       exists <- liftIO $ doesFileExist fp
       if not exists
@@ -36,12 +37,12 @@ fsStore root
             Left  e -> throwString e
             Right (HashTerm x) -> pure $ Just x
 
-  , ssUploadShallow = \x -> do
+  , PutCapability $ \x -> do
       let p = hash x
       liftIO . AE.encodeFile (root ++ "/" ++ fn p)
              $ HashTerm x
       pure p
-  }
+  )
   where
-    fn :: Hash i -> String
+    fn :: Hash RawBlakeHash f -> String
     fn = unpack . hashToText . getConst
