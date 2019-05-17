@@ -1,72 +1,80 @@
 module Merkle.Store where
 
 --------------------------------------------
-import           Control.Applicative (Const(..))
 import           Data.Functor.Compose
 --------------------------------------------
 import           Merkle.Functors (HashAnnotated)
-import           Merkle.Types (Hash, RawHash)
+import           Merkle.Types (Hash)
 import           Util.RecursionSchemes
 --------------------------------------------
 
-type DerefRes f = f (Fix (HashAnnotated f `Compose` Maybe `Compose` f))
 
-data Store m (f :: * -> *)
-  = Store
-  { sDeref :: Hash f -> m (Maybe (DerefRes f))
-  , sUploadShallow :: f (Hash f) -> m (Hash f)
+type Store m h f = (GetCapability m h f, PutCapability m h f)
+
+type ShallowStore m h f = (GetCapabilityShallow m h f, PutCapability m h f)
+
+data GetCapability m h f
+  = GetCapability
+  { gcGet :: Hash h f -> m (Maybe (DerefRes h f))
+  }
+type DerefRes h f = f (Fix (HashAnnotated h f `Compose` Maybe `Compose` f))
+
+data GetCapabilityShallow m h f
+  = GetCapabilityShallow
+  { gcGetShallow :: Hash h f -> m (Maybe (f (Hash h f)))
   }
 
-data ShallowStore m (f :: * -> *)
-  = ShallowStore
-  { ssDeref :: Hash f -> m (Maybe (f (Hash f)))
-  , ssUploadShallow :: f (Hash f) -> m (Hash f)
-  }
 
-liftShallowStore :: forall m f. Monad m => Functor f => ShallowStore m f -> Store m f
-liftShallowStore (ShallowStore d u) = Store d' u
+liftShallowStore
+  :: forall m h f
+   . (Monad m, Functor f)
+  => ShallowStore m h f
+  -> Store m h f
+liftShallowStore (g,p) = (liftShallowGetCap g, p)
+
+liftShallowGetCap
+  :: forall m h f
+   . (Monad m, Functor f)
+  => GetCapabilityShallow m h f
+  -> GetCapability m h f
+liftShallowGetCap (GetCapabilityShallow g) = GetCapability g'
   where
-    d' :: Hash f -> m (Maybe (DerefRes f))
-    d' h =
-        d h >>= \case
+    g' :: Hash h f -> m (Maybe (DerefRes h f))
+    g' h =
+        g h >>= \case
           Nothing -> pure Nothing
           Just x -> pure . Just $ fmap (\p' -> Fix $ Compose (p', Compose Nothing)) x
 
-data RawShallowStore m (f :: * -> *)
-  = RawShallowStore
-  { rssDeref :: RawHash -> m (Maybe (f RawHash))
-  , rssUploadShallow :: f RawHash -> m RawHash
-  }
 
-liftRawStore :: forall m f. Monad m => Functor f => RawShallowStore m f -> ShallowStore m f
-liftRawStore (RawShallowStore d u) = ShallowStore d' u'
-  where
-    u' f =
-      u (fmap getConst f) >>= pure . Const
-    d' (Const h) =
-        d h >>= \case
-          Nothing -> pure Nothing
-          Just x -> pure . Just $ fmap Const x
+data PutCapability m h f
+  = PutCapability
+  { gcPut :: f (Hash h f) -> m (Hash h f)
+  }
 
 
 -- technically store is now a semigroup
 -- TODO: write fallback vals to original cache! (or don't, it makes laziness more observable..)
-withFallback :: Monad m => Store m f -> Store m f -> Store m f
-withFallback main fallback = Store deref' (sUploadShallow main)
+withFallback :: Monad m => GetCapability m h f -> GetCapability m h f -> GetCapability m h f
+withFallback main fallback = GetCapability get
   where
-    deref' h = do
-      sDeref main h >>= \case
+    get h = do
+      gcGet main h >>= \case
         Just mainRes -> pure $ Just mainRes
-        Nothing -> sDeref fallback h
+        Nothing -> gcGet fallback h
 
 uploadDeep
-  :: forall m f
-   . Traversable f
-  => Monad m
-  => Store m f
+  :: forall m h f
+   . (Traversable f, Monad m)
+  => PutCapability m h f
   -> (Fix f)
-  -> m (Hash f)
-uploadDeep store = cataM (sUploadShallow store)
+  -> m (Hash h f)
+uploadDeep = cataM . gcPut
 
-liftStore :: (forall x. m x -> m' x) -> Store m f -> Store m' f
-liftStore f (Store d u) = Store (f . d) (f . u)
+liftStore :: (forall x. m x -> m' x) -> Store m h f -> Store m' h f
+liftStore f (g,p) = (liftGetCap f g, liftPutCap f p)
+
+liftGetCap :: (forall x. m x -> m' x) -> GetCapability m h f -> GetCapability m' h f
+liftGetCap f (GetCapability g) = GetCapability (f . g)
+
+liftPutCap :: (forall x. m x -> m' x) -> PutCapability m h f -> PutCapability m' h f
+liftPutCap f (PutCapability g) = PutCapability (f . g)

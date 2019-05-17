@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Merkle.Store.TestUtils where
@@ -19,19 +20,27 @@ import           Merkle.Functors
 import           Merkle.Store
 import           Merkle.Store.Deref
 import           Merkle.Types
+import           Merkle.Types.BlakeHash
 import           Util.RecursionSchemes
 --------------------------------------------
 
 -- | generate a nested structure -> deep upload -> strict download -> check (==)
 storeTestDeep
-  :: (Hashable f, Functor f, Traversable f, Eq1 f, Show1 f, MonadIO m, MonadThrow m)
+  :: ( Hashable RawBlakeHash f
+     , Functor f
+     , Traversable f
+     , Eq1 f
+     , Show1 f
+     , MonadIO m
+     , MonadThrow m
+     )
   => Gen (Fix f)
-  -> Store (PropertyT m) f
+  -> Store (PropertyT m) RawBlakeHash f
   -> PropertyT m ()
-storeTestDeep g s = do
+storeTestDeep g (getCap, putCap) = do
     x <- forAll g
-    h <- uploadDeep s x
-    r <- strictDeref $ lazyDeref' s h
+    h <- uploadDeep putCap x
+    r <- strictDeref $ lazyDeref' getCap h
     stripTags r === x
 
 
@@ -49,7 +58,7 @@ instance AE.FromJSON1 MockBlockchain
 $(deriveShow1 ''MockBlockchain)
 $(deriveEq1   ''MockBlockchain)
 
-instance Hashable MockBlockchain where
+instance Hashable RawBlakeHash MockBlockchain where
   -- just show the thing, then hash that string. sufficient for testing.
   hash = doHash . pure . unpackString . show
 
@@ -85,7 +94,7 @@ instance AE.FromJSON1 MockDirectoryTree
 $(deriveShow1 ''MockDirectoryTree)
 $(deriveEq1   ''MockDirectoryTree)
 
-instance Hashable MockDirectoryTree where
+instance Hashable RawBlakeHash MockDirectoryTree where
   -- just show the thing, then hash that string. sufficient for testing.
   hash = doHash . pure . unpackString . show
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Merkle.Store.NetStoreSpec where
 
@@ -22,6 +23,7 @@ import           Merkle.Store.FileSystem
 import           Merkle.Store.Network
 import           Merkle.Store.TestUtils
 import           Merkle.Types
+import           Merkle.Types.BlakeHash
 import           Util.RecursionSchemes
 --------------------------------------------
 
@@ -29,8 +31,15 @@ import           Util.RecursionSchemes
 spec :: Spec
 spec = describe "network store served over REST, backed by a file system store" $ do
   let testHarness :: forall f
-                   . (AE.ToJSON1 f, AE.FromJSON1 f, Show1 f, Hashable f, Eq1 f, Traversable f)
-                  => Gen (Fix f) -> IO ()
+                   . ( AE.ToJSON1 f
+                     , AE.FromJSON1 f
+                     , Show1 f
+                     , Hashable RawBlakeHash f
+                     , Eq1 f
+                     , Traversable f
+                     )
+                  => Gen (Fix f)
+                  -> IO ()
       testHarness g = do
         -- use one shared hash-addressed store for all tests
         -- if hash == , then content ==, so safe. Merkle!
@@ -39,7 +48,7 @@ spec = describe "network store served over REST, backed by a file system store" 
           manager <- newManager defaultManagerSettings
           let env = mkClientEnv manager (BaseUrl Http "localhost" port "")
           let netStore' = liftStore (\mx -> liftIO (runClientM mx env) >>= either throw pure) netStore
-          bracket (liftIO . C.forkIO . Warp.run port $ app (liftShallowStore $ fsStore netpath :: Store IO f))
+          bracket (liftIO . C.forkIO . Warp.run port $ app (liftShallowStore $ fsStore netpath :: Store IO RawBlakeHash f))
             C.killThread $ \_ -> do
               -- all this should work fine in parallel
               -- store is hash addressed, so no collisions should matter

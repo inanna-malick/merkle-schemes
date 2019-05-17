@@ -7,26 +7,26 @@ import           Merkle.Types
 import           Util.RecursionSchemes
 --------------------------------------------
 
-type HashAnnotated f = (,) (Hash f)
+type HashAnnotated h f = (,) (Hash h f)
 
 htPointer
-  :: Fix (HashAnnotated x `Compose` f)
-  -> Hash x
+  :: Fix (HashAnnotated h f `Compose` f)
+  -> Hash h f
 htPointer (Fix (Compose (p, _))) = p
 
 htElem
-  :: Fix (HashAnnotated x `Compose` f)
-  -> f (Fix (HashAnnotated x `Compose` f))
+  :: Fix (HashAnnotated h f `Compose` f)
+  -> f (Fix (HashAnnotated h f `Compose` f))
 htElem (Fix (Compose (_, e))) = e
 
 -- | Remove hash annotations from some HashAnnotated structure
-stripTags :: Functor f => Fix (HashAnnotated x `Compose` f) -> Fix f
+stripTags :: Functor f => Fix (HashAnnotated h f `Compose` f) -> Fix f
 stripTags = cata (Fix . snd . getCompose)
 
 -- | Annotate each layer of some structure with its hash
 hashTag
   :: Functor f
-  => Hashable f
+  => Hashable h f
   => Fix f
-  -> Fix (HashAnnotated f `Compose` f)
+  -> Fix (HashAnnotated h f `Compose` f)
 hashTag = annotate hash
