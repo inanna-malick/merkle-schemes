@@ -8,35 +8,37 @@ import           Data.Text
 import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
 import           GHC.Generics (Generic)
 --------------------------------------------
+import           Merkle.Types (Hash)
+--------------------------------------------
 
 -- IPFS: string, compatible, 58 bit encoding - using string instead of bytestring for simplicity
-newtype Hash k
-  = Hash { unHash :: Text } deriving (Eq, Ord, Show, Generic)
+newtype RawIPFSHash
+  = RawIPFSHash { unRawIPFSHash :: Text } deriving (Eq, Ord, Show, Generic)
 
-instance ToJSON (Hash x) where
-  toJSON = String . unHash
+instance ToJSON RawIPFSHash where
+  toJSON = String . unRawIPFSHash
 
-instance FromJSON (Hash x) where
+instance FromJSON RawIPFSHash where
   parseJSON =
-    withText "RawHash" (pure . Hash)
+    withText "RawRawIPFSHash" (pure . RawIPFSHash)
 
 -- | For use with IPFS links (so only top-level element need be pinned)
 -- should return all hashes of any type (eg bifunctor case where first
 -- type parameter is also a hash)
 class ExtractKeys f where
-  extractHashKeys :: f (Hash f) -> [Text]
+  extractRawIPFSHashKeys :: f (Hash RawIPFSHash f) -> [RawIPFSHash]
 
 data DagNode a
   = DagNode
   { dnValue :: a
-  , dnLinks :: [Text] -- raw hashes only
+  , dnLinks :: [RawIPFSHash] -- raw hashes only
   }
 
 instance FromJSON x => FromJSON (DagNode x) where
     parseJSON = withObject "dag node" $ \o -> do
               d <- o .: "Data"
               ls <- o .: "Links"
-              ls' <- traverse (withObject "dag link" $ \o' -> o' .: "Hash") ls
+              ls' <- traverse (withObject "dag link" $ \o' -> o' .: "RawIPFSHash") ls
               case Base64.decode (encodeUtf8 d) >>= eitherDecode . LB.fromStrict of
                 Left err -> fail err
                 Right x  -> pure $ DagNode x ls'
@@ -45,7 +47,7 @@ instance ToJSON x => ToJSON (DagNode x) where
     toJSON (DagNode x ls)
       = object [ "Data" .= decodeLatin1 (Base64.encode $ LB.toStrict $ encode x)
                , "Links" .= fmap (\t -> object [ "Name" .= t
-                                               , "Hash" .= t
+                                               , "RawIPFSHash" .= t
                                                -- TODO: figure out how to get actual size here
                                                ]) ls
                ]
