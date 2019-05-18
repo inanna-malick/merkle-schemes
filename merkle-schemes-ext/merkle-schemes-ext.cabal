@@ -18,7 +18,7 @@ library
       Merkle.Store.Network
       Merkle.Types.BlakeHash
   other-modules:
-      Paths_merkle_schemes
+      Paths_merkle_schemes_ext
   hs-source-dirs:
       src
   default-extensions: DeriveFunctor DeriveFoldable DeriveGeneric DeriveTraversable DataKinds FlexibleContexts FlexibleInstances LambdaCase KindSignatures OverloadedStrings PolyKinds RankNTypes ScopedTypeVariables StandaloneDeriving TemplateHaskell TupleSections TypeOperators
