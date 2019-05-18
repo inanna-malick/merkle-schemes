@@ -26,7 +26,7 @@ instance FromJSON RawIPFSHash where
 -- should return all hashes of any type (eg bifunctor case where first
 -- type parameter is also a hash)
 class ExtractKeys f where
-  extractRawIPFSHashKeys :: f (Hash RawIPFSHash f) -> [RawIPFSHash]
+  extractRawKeys :: f (Hash RawIPFSHash f) -> [RawIPFSHash]
 
 data DagNode a
   = DagNode

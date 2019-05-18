@@ -15,6 +15,7 @@ source-repository head
 library
   exposed-modules:
       Merkle.Store.FileSystem
+      Merkle.Store.IPFS
       Merkle.Store.Network
       Merkle.Types.BlakeHash
   other-modules:
