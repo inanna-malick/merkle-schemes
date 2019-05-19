@@ -32,7 +32,7 @@ data DagNode a
   = DagNode
   { dnValue :: a
   , dnLinks :: [RawIPFSHash] -- raw hashes only
-  }
+  } deriving (Show)
 
 instance FromJSON x => FromJSON (DagNode x) where
     parseJSON = withObject "dag node" $ \o -> do

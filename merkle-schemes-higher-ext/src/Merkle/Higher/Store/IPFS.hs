@@ -48,7 +48,6 @@ getForHash
   -> IO (f Hash i)
 getForHash (IPFSNode host' port') (Hash h) = do
     resp <- getWith opts path
-    -- response type will not be json, to ipfs this is just a blob
     case eitherDecode (resp ^. responseBody) of
       Left err  -> throwM (JSONError err)
       Right (DagNode val _ls) -> pure val
