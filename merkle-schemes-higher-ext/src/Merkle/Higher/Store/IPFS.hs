@@ -54,7 +54,7 @@ getForHash (IPFSNode host' port') (Hash h) = do
 
   where
     opts = defaults & param "arg" .~ [h]
-    path = host' ++ ":" ++ show port' ++ "/api/v0/object/get?datafieldenc=base64"
+    path = host' ++ ":" ++ show port' ++ "/api/v0/object/get?data-encoding=base64"
 
 
 putForHash
