@@ -17,7 +17,6 @@ import           Merkle.Types.IPFS
 ipfsStore
   :: ( FromJSON (f (Hash RawIPFSHash f))
      , ToJSON   (f (Hash RawIPFSHash f))
-     , Show (f (Hash RawIPFSHash f))
      , ExtractKeys f -- for linking obj graph together (weak foldable, kinda)
      )
   => IPFSNode
@@ -57,7 +56,6 @@ getForHash (IPFSNode host' port') (Const h) = do
 
 putForHash
   :: ( ToJSON (f (Hash RawIPFSHash f))
-     , Show (f (Hash RawIPFSHash f))
      , ExtractKeys f
      )
   => IPFSNode
@@ -66,7 +64,7 @@ putForHash
 putForHash (IPFSNode host' port') fhi = do
     let obj = DagNode fhi $ extractRawKeys fhi
     putStrLn "put"
-    print obj
+    print $ encode obj
     resp <- post path (partLBS "data" $ encode obj)
     print resp
     pure . Const . RawIPFSHash $ resp ^. responseBody . key "Hash" . _String
