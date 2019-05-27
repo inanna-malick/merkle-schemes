@@ -7,10 +7,7 @@ import           Control.Exception.Safe
 import           Control.Monad.Except
 import           Data.Aeson
 import           Data.ByteString.Lazy (toStrict)
-import qualified Data.Multihash.Base as MultiHash
-import qualified Data.Multihash.Digest as MultiHashD
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
 import           System.Directory (doesFileExist)
 -- --------------------------------------------
 import           Merkle.Store
@@ -29,7 +26,7 @@ mockIpfsStore
   -> ShallowStore IO RawIPFSHash f
 mockIpfsStore base
   = ( GetCapabilityShallow $ getForHash base
-    , PutCapability $ putForHash base
+    , PutCapability        $ putForHash base
     )
 
 toPath :: FilePath -> RawIPFSHash -> FilePath
@@ -39,10 +36,7 @@ toPath base (RawIPFSHash h) = base ++ "/" ++ T.unpack h ++ ".json"
 --   NOTE: no promise of exact equality exists here, may differ from IPFS hash
 --   NOTE: embeds partial bytestring decode, should work
 mkMockIPFSHash :: ToJSON x => x -> RawIPFSHash
-mkMockIPFSHash x = RawIPFSHash $ TE.decodeUtf8 $ toStrict
-                 $ MultiHash.encode MultiHash.Base58
-                 $ MultiHashD.encode MultiHashD.BLAKE2B
-                 $ unpackHash' $ doHash' [toStrict $ encode x]
+mkMockIPFSHash x = RawIPFSHash $ hashToText $ doHash' [toStrict $ encode x]
 
 getForHash
   :: FromJSON (f (Hash RawIPFSHash f))

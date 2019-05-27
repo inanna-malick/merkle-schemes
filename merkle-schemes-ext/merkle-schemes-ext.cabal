@@ -44,8 +44,6 @@ library
     , memory
     , merkle-schemes
     , mtl
-    -- for mock IPFS
-    , multihash
     , optparse-applicative
     , pretty
     , random

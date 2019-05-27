@@ -5,9 +5,3 @@ packages:
 - merkle-schemes-higher
 - merkle-schemes-higher-bt
 - merkle-schemes-higher-ext
-
-extra-deps:
-- github: multiformats/haskell-multihash
-  commit: a04db45dff518fe5bd938a51a3ae62ee12a0c90f
-- base58-bytestring-0.1.0@sha256:a1da72ee89d5450bac1c792d9fcbe95ed7154ab7246f2172b57bd4fd9b5eab79
-- cryptonite-0.24@sha256:4f0865ceb2b6e99f37cb2243831a63ac76b53960c20c75f890f729635551c7d7
