@@ -6,6 +6,7 @@ module Util.RecursionSchemes
 
 --------------------------------------------
 import           Control.Monad.Free hiding (unfold)
+import           Data.Bifunctor
 import           Data.Bitraversable (Bitraversable(..))
 import           Data.Functor.Compose
 import           Data.Functor.Foldable
@@ -38,6 +39,13 @@ cataM
   => AlgebraM m f a
   -> Fix f -> m a
 cataM f = (>>= f) . traverse (cataM f) . unfix
+
+bimapFix
+  :: (Bitraversable f, Functor (f a))
+  => (a -> b)
+  -> Fix (f a)
+  -> Fix (f b)
+bimapFix f = cata (Fix . bimap f id)
 
 bitraverseFix
   :: (Bitraversable f, Monad m, Traversable (f a))

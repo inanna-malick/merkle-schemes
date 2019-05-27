@@ -16,6 +16,7 @@ library
   exposed-modules:
       Merkle.Store.FileSystem
       Merkle.Store.IPFS
+      Merkle.Store.MockIPFS
       Merkle.Store.Network
       Merkle.Types.BlakeHash
   other-modules:
@@ -43,6 +44,8 @@ library
     , memory
     , merkle-schemes
     , mtl
+    -- for mock IPFS
+    , multihash
     , optparse-applicative
     , pretty
     , random
