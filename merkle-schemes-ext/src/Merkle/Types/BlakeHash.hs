@@ -59,9 +59,15 @@ unpackString :: String -> ByteString
 unpackString = encodeUtf8 . pack
 
 unpackHash :: Hash RawBlakeHash x -> ByteString
-unpackHash = BA.pack . BA.unpack . unRawBlakeHash . getConst
+unpackHash = unpackHash' . getConst
+
+unpackHash' :: RawBlakeHash -> ByteString
+unpackHash' = BA.pack . BA.unpack . unRawBlakeHash
 
 -- | do actual hash computation type stuff. blake2b!
 doHash :: [ByteString] -> Hash RawBlakeHash i
-doHash = Const . RawBlakeHash . CH.hashFinalize
+doHash = Const . doHash'
+
+doHash' :: [ByteString] -> RawBlakeHash
+doHash' = RawBlakeHash . CH.hashFinalize
        . CH.hashUpdates (CH.hashInit :: CH.Context CHA.Blake2b_256)
