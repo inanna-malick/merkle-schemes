@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle
+
+# Merkle Schemes 2
+
+---
+
+# Recursion Schemes
+
+Type level fixed point as the glue between each layer `f`
+
+```haskell
+newtype Fix f = Fix { unFix :: f (Fix f) }
+```
+
+Simple example `f`: Cons cell list
+
+```haskell
+data ListF a b
+  = Cons a b
+  | Nil
+  deriving (Functor, Foldable, Traversable)
+
+type List a = Fix (ListF a)
+```
+
+Simple example list:
+
+```haskell
+myList :: List Int
+myList = Fix $ Cons 1 $ Fix $ Cons 2 $ Fix Nil 
+```
+
+
+---
+
+# Working with Fix: cata (fold)
+
+```haskell
+newtype Fix f = Fix { unFix :: f (Fix f) }
+
+cata
+  :: Functor f
+  => (f a -> a)
+  -> Fix f
+  -> a
+cata alg x = alg             -- a
+           . fmap (cata alg) -- f a
+           . unFix           -- f (Fix f)
+           $ x               -- Fix f
+```
+
+---
+
+# Working with Fix: cata (fold) example
+
+
+Cata in action: folding over a list
+
+```haskell
+toList :: forall a.  List a -> [a]
+toList = cata alg
+  where
+    alg :: ListF a [a] -> [a]
+    alg Nil             = []
+    alg (Cons elem acc) = elem : acc
+```
+
+```haskell
+> toList myList
+[1,2]
+```
+
+todo: confirm via REPL
+
+---
+
+# Working with Fix: ana (unfold)
+
+
+```haskell
+newtype Fix f = Fix { unFix :: f (Fix f) }
+
+ana :: Functor f
+    => (a -> f a)
+    -> a
+    -> Fix f
+ana alg x = Fix            -- Fix f
+          . fmap (ana alg) -- f (Fix f)
+          . alg            -- f a
+          $ x              -- a
+```
+
+---
+
+# Working with Fix: ana (unfold) example
+
+
+```haskell
+fromList :: [a] -> List a
+fromList = ana alg
+  where
+    alg :: [a] -> ListF a [a]
+    alg []   = Nil
+    alg x:xs = ListF x xs
+
+```
+
+```haskell
+> toList $ fromList [1..10]
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+```
+
+todo: test this - wrote late in day, might accidentally reverse list?
+
+
+---
+
+# Working with Fix: cataM (monadic fold)
+
+todo incl traverse type sig :)
+
+```haskell
+newtype Fix f = Fix { unFix :: f (Fix f) }
+
+cataM
+  :: (Monad m, Traversable f)
+  => (f a -> m a)
+  -> Fix f
+  -> m a
+cataM alg x = do
+    let fFixF = unFix x              -- f (Fix f)
+    fA <- traverse (cataM alg) fFixF -- m (f a)
+    alg fA                           -- m a
+```
+
+---
+
+# Working with Fix: cataM (monadic fold)
+
+
+CataM in action: printing a list of integers
+
+```haskell
+printElems :: Show a => List a -> IO ()
+printElems = cataM alg
+  where
+    alg :: ListF () -> IO ()
+    alg Nil = putStrLn "nil"
+    alg (Cons elem ()) = putStrLn $ "cons cell: " ++ show elem
+```
+
+```haskell
+> printElems myList
+nil
+cons cell: 2
+cons cell: 1
+```
+
+---
+
+# This lets us do some cool stuff!
+
+recap:
+```haskell
+data DirLayer a = DirLayer { entities :: [(FilePath, FileTreeEntity a)]}
+
+data FileTreeEntity a
+  = FileEntity String 
+  | DirEntity  a
+
+type DirTree = Fix DirLayer
+```
+---
+
+# Working with Fix: anaM (monadic unfold)
+
+```haskell
+newtype Fix f = Fix { unFix :: f (Fix f) }
+
+anaM :: (Monad m, Traversable f)
+     => (a -> m (f a))
+     -> a
+     -> m (Fix f)
+anaM alg x = do
+  fA    <- alg x                  -- m (f a)
+  fFixF <- traverse (anaM alg) fA -- m (f (Fix f))
+  pure $ Fix fFixF                -- m (Fix f) 
+```
+---
+
+# Hashing a directory tree
+
+```haskell
+hashLayer :: DirLayer Hash -> Hash
+hashLayer = hash . AE.encode
+```
+
+All you need to do is write a function to hash a layer!
+
+```haskell
+cata :: Functor f => (f a -> a) -> Fix f -> a
+
+hashDirTree :: DirTree -> Hash
+hashDirTree = cata hashLayer
+```
+
+
+---
+
+# Writing a directory tree to disk
+
+```haskell
+writeLayer :: DirLayer Hash -> IO Hash
+writeLayer layer = do
+  let h = hashLayer layer
+      path = hashToPath h
+  AE.encodeFile path layer -- write dir layer to path
+  pure h
+```
+
+All you need to do is write a function to write a layer to the store!
+
+```haskell
+cataM :: (Monad m, Traversable f) => (f a -> m a) -> Fix f -> m a
+
+writeDirTree :: DirTree -> IO Hash
+writeDirTree = cataM writeLayer
+```
+
+---
+
+# Reading a directory tree from disk
+
+```haskell
+readLayer :: Hash -> IO (DirLayer Hash)
+readLayer h = do
+  res <- AE.decodeFileStrict (hashToPath h)
+  case res of
+    Nothing -> fail "hash deref failed"
+    Maybe x -> pure x
+```
+
+All you need to do is write a function to retrieve a layer from the store!
+
+```haskell
+anaM :: (Monad m, Traversable f) => (a -> m (f a)) -> a -> m (Fix f)
+
+readDirTree :: Hash -> IO DirTree
+readDirTree = anaM writeLayer
+```
+
+---
+
+# Diffing two DirTrees: the types
+
+We'll use this sum type to represent different kinds of diffs:
+
+```haskell
+data Diff = FileModified
+          | FileReplacedWithDir
+          | DirReplacedWithFile
+          | EntityDeleted
+          | EntityCreated
+  deriving (Eq, Ord, Show)
+```
+
+We'll be implementing a function with this type - let's define a stub
+```haskell
+diffDirTrees :: DirTree -> DirTree -> [(FilePath, Diff)]
+diffDirTrees = undefined
+```
+
+---
+
+# Diffing two DirTrees: entity removed/created 
+
+The case where a `FileTreeEntity` with some name only exists in one map or the other is simple
+
+```haskell
+onRemoved, onAdded :: FilePath -> FileTreeEntity DirTree -> [(FilePath, Diff)]
+onRemoved path _ = [(path, EntityDeleted)]
+onAdded   path _ = [(path, EntityCreated)]
+```
+
+---
+
+# Diffing two Dirs: handling conflict
+
+The case where a `FileTreeEntity` exists in both maps is more interesting
+
+```haskell
+onConflict :: FilePath
+           -> FileTreeEntity DirTree
+           -> FileTreeEntity DirTree
+           -> [(FilePath, Diff)]
+
+-- named directory exists in both DirTrees: recurse
+onConflict path (DirEntity d1) (DirEntity d2) =
+  let updatePath (p,x) = (path ++ "/" ++ p, x)
+   in updatePath <$> diffDirTrees d1 d2
+
+-- named file exists in both DirTrees: compare
+onConflict path (FileEntity f1) (FileEntity f2)
+  | f1 /= f2  = [(path, FileModified)]
+  | otherwise = []
+
+-- dir replaced with file
+onConflict path (DirEntity _) (FileEntity _) = [(path, DirReplacedWithFile)]
+
+-- file replaced with dir
+onConflict path (FileEntity _) (DirEntity _) = [(path, FileReplacedWithDir)]
+
+```
+---
+
+# Diffing two DirTrees: merging maps
+
+Ok, that's most of the logic specified. Now all we need to do is compare two directories and dispatch on three cases
+- a `FileTreeEntity` exists at some path in both directories
+- a `FileTreeEntity` exists at some path in only the first directory
+- a `FileTreeEntity` exists at some path in only the second directory
+
+
+We have two `[(FilePath, FileTreeEntity DirTree)]`s that we need to compare. Put another way, we have two `Map FilePath (FileTreeEntity DirTree)`s.
+
+We'll use the excellent tooling in `Data.Map.Merge` to handle comparing entities with matching names.
+
+---
+
+# Diffing two Dirs: putting it all together
+
+```haskell
+diffDirTrees :: DirTree -> DirTree -> [(FilePath, Diff)]
+diffDirTrees (Dir entities1) (Dir entities2) = join $ Map.elems mergeRes
+
+  where
+    mergeRes :: Map FilePath [(FilePath, Diff)]
+    mergeRes = Map.merge (Map.mapMissing onRemoved)
+                         (Map.mapMissing onAdded)
+                         (Map.zipWithMatched onConflict)
+                         (Map.fromList entities1)
+                         (Map.fromList entities2)
+```
+
+TODO: test above code, include example directories and example outputs? -or- use off-screen readDir to go directly from file tree (can visualize easily via `tree` output) to `Dir` which can then be diffed
+
+---
+
+# Example Diff
+
+dir 1:
+
+```
+├── README.md (contents: foo)
+└── foo
+    └── Foo.hs (contents: bar)
+```
+
+dir 2:
+
+
+```
+├── README.md (contents: foobar)
+└── foo
+    └── Bar.hs (contents: bar)
+```
+
+result:
+```
+[ ("README.md", FileModified)
+, ("foo/Foo.hs", EntityDeleted)
+, ("foo/Bar.hs", EntityCreated)
+]
+```
+
+todo: more examples
+
+---
+
+Hook for next:
+- will add lazy traversal
+- hash comparison based shortcutting
+- generic versions of DirTree-specific functions
+
+---
+
+    </textarea>
+    <script src="https://remarkjs.com/downloads/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
