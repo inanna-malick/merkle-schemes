@@ -1,5 +1,6 @@
 resolver: lts-13.8
 packages:
+- talk
 - merkle-schemes
 - merkle-schemes-ext
 - merkle-schemes-higher
