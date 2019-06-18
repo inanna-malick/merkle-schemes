@@ -14,13 +14,13 @@ source-repository head
 library
   exposed-modules:
       DirTree.FileIO
+      DirTree.Hashing
       DirTree.Types
       DirTree.FileStore
       DirTree.Diff.Lazy
       DirTree.Diff.Simple
       DirTree.Diff.Types
       Control.RecursionSchemes
-      Data.Crypto.Hash
   other-modules:
       Paths_talk
   hs-source-dirs:
