@@ -42,18 +42,18 @@ newtype Fix f = Fix { unFix :: f (Fix f) }
 Simple example `f`: Cons cell list
 
 ```haskell
-data ListF a b
-  = Cons a b
+data IntListF a
+  = Cons Int a
   | Nil
   deriving (Functor, Foldable, Traversable)
 
-type List a = Fix (ListF a)
+type IntList = Fix ListF
 ```
 
 Simple example list:
 
 ```haskell
-myList :: List Int
+myList :: IntList
 myList = Fix $ Cons 1 $ Fix $ Cons 2 $ Fix Nil
 ```
 
@@ -65,14 +65,14 @@ myList = Fix $ Cons 1 $ Fix $ Cons 2 $ Fix Nil
 newtype Fix f = Fix { unFix :: f (Fix f) }
 
 cata
-  :: Functor f
-  => (f a -> a)
+  :: Functor f -- f == IntList
+  => (IntList a -> a)
   -> Fix f
   -> a
 cata alg x = alg             -- a
-           . fmap (cata alg) -- f a
-           . unFix           -- f (Fix f)
-           $ x               -- Fix f
+           . fmap (cata alg) -- IntList a
+           . unFix           -- IntList (Fix IntList)
+           $ x               -- Fix IntList
 ```
 
 ---
@@ -83,10 +83,10 @@ cata alg x = alg             -- a
 Cata in action: folding over a list
 
 ```haskell
-toList :: forall a.  List a -> [a]
+toList :: IntList -> [Int]
 toList = cata alg
   where
-    alg :: ListF a [a] -> [a]
+    alg :: IntListF [Int] -> [Int]
     alg Nil             = []
     alg (Cons x acc) = x : acc
 ```
@@ -104,13 +104,13 @@ toList = cata alg
 ```haskell
 newtype Fix f = Fix { unFix :: f (Fix f) }
 
-ana :: Functor f
-    => (a -> f a)
+ana :: Functor f -- f == IntList
+    => (a -> IntList a)
     -> a
-    -> Fix f
-ana alg x = Fix            -- Fix f
-          . fmap (ana alg) -- f (Fix f)
-          . alg            -- f a
+    -> Fix IntList
+ana alg x = Fix            -- Fix IntList
+          . fmap (ana alg) -- IntList (Fix IntList)
+          . alg            -- IntList a
           $ x              -- a
 ```
 
@@ -120,10 +120,10 @@ ana alg x = Fix            -- Fix f
 
 
 ```haskell
-fromList :: [a] -> List a
+fromList :: [Int] -> IntList a
 fromList = ana alg
   where
-    alg :: [a] -> ListF a [a]
+    alg :: [Int] -> IntListF a [Int]
     alg []     = Nil
     alg (x:xs) = Cons x xs
 ```
@@ -141,13 +141,13 @@ fromList = ana alg
 newtype Fix f = Fix { unFix :: f (Fix f) }
 
 cataM
-  :: (Monad m, Traversable f)
-  => (f a -> m a)
-  -> Fix f
+  :: (Monad m, Traversable f) -- f == IntList
+  => (IntList a -> m a)
+  -> Fix IntList
   -> m a
 cataM alg x = do
-    let fFixF = unFix x              -- f (Fix f)
-    fA <- traverse (cataM alg) fFixF -- m (f a)
+    let fFixF = unFix x              -- IntList (Fix IntList)
+    fA <- traverse (cataM alg) fFixF -- m (IntList a)
     alg fA                           -- m a
 ```
 
@@ -159,10 +159,10 @@ cataM alg x = do
 CataM in action: printing a list of integers
 
 ```haskell
-printListElems :: forall a. Show a => List a -> IO ()
+printListElems :: IntList -> IO ()
 printListElems = cataM alg
   where
-    alg :: ListF a () -> IO ()
+    alg :: IntList () -> IO ()
     alg Nil = putStrLn "nil"
     alg (Cons x ()) = putStrLn $ "cons cell: " ++ show x
 ```
@@ -181,14 +181,14 @@ cons cell: 1
 ```haskell
 newtype Fix f = Fix { unFix :: f (Fix f) }
 
-anaM :: (Monad m, Traversable f)
-     => (a -> m (f a))
+anaM :: (Monad m, Traversable f) -- f == IntList
+     => (a -> m (IntList a))
      -> a
-     -> m (Fix f)
+     -> m (Fix IntList)
 anaM alg x = do
-  fA    <- alg x                  -- m (f a)
-  fFixF <- traverse (anaM alg) fA -- m (f (Fix f))
-  pure $ Fix fFixF                -- m (Fix f) 
+  fA    <- alg x                  -- m (IntList a)
+  fFixF <- traverse (anaM alg) fA -- m (IntList (Fix IntList))
+  pure $ Fix fFixF                -- m (Fix IntList) 
 ```
 ---
 
