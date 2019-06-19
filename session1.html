@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Title</title>
+    <title>Merkle Schemes 1</title>
     <meta charset="utf-8">
     <style>
       @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
@@ -13,7 +13,11 @@
         font-family: 'Yanone Kaffeesatz';
         font-weight: normal;
       }
-      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+     .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+     .image-70 img {
+        width: 70%;
+      }
+     .footer { position: absolute; bottom: 12px; left: 20px }
     </style>
   </head>
   <body>
@@ -25,7 +29,9 @@ class: center, middle
 
 ---
 
-# Introduction/Intro story/heres why u should care type thing?
+layout:true
+
+<div class="footer">Paul Kinsky, contact: pkinsky@gmail.com, twitter: @pseudo_morphism</div>
 
 ---
 
@@ -48,32 +54,28 @@ class: center, middle
 in haskell:
 
 ```haskell
-hashFunction :: ByteString -> Hash
+newtype Hash = Hash { unHash :: CH.Digest CHA.SHA256 }
+
+hash :: ByteString -> Hash
 ```
-
----
-
-below slides still need work
-
-todo: note on Dags vs. trees needs to go somewhere
 
 ---
 # Merkle Trees
 
-img: full tree with hash pointers subtantiated
+.image-70[![Default-aligned image](images/Hash_Tree.png)]
 
-A Merkle tree is a tree in which each node is annotated with the cryptographic hash of that node's text, which includes the contents of that node and the hashes of any nodes that it references
-
-^ needs work
+A Merkle tree is a tree in which each node is annotated with the cryptographic hash of that node's text, which includes:
+- the contents of that node, and
+- the hashes of any nodes that it references
 
 ---
 
 # Benefits of Merkle Trees
 
-Git and Mercurial use Merkle Trees to represent repository directory trees
-
-- Immutability
-- Quick comparison (`O(1)`)
+- Immutability via hash pinning
+- Constant time equality checking of subtrees
+    - diffing is O (n log(n)) with regard to the number of _changes_
+    - not the number of entities in a tree
 - Lazy traversal
 - Structural sharing
 - Easy caching
@@ -89,7 +91,7 @@ Some examples:
     - Git
     - Mercurial
 - Decentralized web
-    - Bittorrent 
+    - Bittorrent
     - Bitcoin/Blockchain
     - IPFS
 - Build tools
@@ -99,15 +101,11 @@ Some examples:
 
 ---
 
-# Merkle Trees
+# Merkle Tree Implementation Note
 
-img: individual layer
+.image-70[![Default-aligned image](images/Hash_Tree.png)]
 
-Each node in a Merkle tree has some content and some pointers (revisit)
-
-img: full tree with pointer links
-
-Taken together, these nodes form a tree where the edges are hash pointer links 
+Merkle trees are usually stored as a series of individual layers with recursive links replaced by hash pointers
 
 ---
 
@@ -122,6 +120,7 @@ Enables:
 - Structural sharing
 - Simplified caching
 
+
 ---
 
 # Haskell Code Sketch: DirTree
@@ -129,26 +128,33 @@ Enables:
 simple directory tree (without any hash annotations):
 
 ```haskell
-data DirTree = DirTree { entities :: [(FilePath, FileFileTreeEntity)]}
+data DirTree
+  = DirTree
+  { entities :: [(FilePath, FileFileTreeEntity)]
+  }
 
 data FileTreeEntity
-  = FileEntity String
+  = FileEntity String -- storing file contents inline for simplicity
   | DirEntity  DirTree
 ```
 
-Note that top-level directory has no name (as in git)
+- top-level directory has no name (as in git)
+- file are contents stored inline for simplicity - will change later
 
 ---
 
 # Haskell Code Sketch: Low-level Structure
 
 ```haskell
-newtype Hash = Hash { unHash :: Int}
+newtype Hash = Hash { unHash :: CH.Digest CHA.SHA256 }
 
-data HashableDirLayer = HashableDir { entities :: [(FilePath, HashableFileTreeEntity)]}
+data HashableDirLayer
+  = HashableDir
+  { entities :: [(FilePath, HashableFileTreeEntity)
+  }
 
 data HashableFileTreeEntity
-  = HashableFileEntity String 
+  = HashableFileEntity String -- storing file contents inline for simplicity
   | HashableDirEntity  Hash
 ```
 
@@ -158,13 +164,13 @@ Only difference: recursive `DirTree` parameter replaced with `Hash` pointer.
 
 # Haskell Code Sketch: Refactor
 
-There's a lot of code duplication here. We know only one thing changes (the recursive parameter) between `Dir` and `HashableDirLayer`, can we instead use one type parameterized over that? 
+There's a lot of code duplication here. Only one thing changes (the recursive parameter) between `Dir` and `HashableDirLayer`, can we instead use one type parameterized over that?
 
 ```haskell
 data DirLayer a = DirLayer { entities :: [(FilePath, FileTreeEntity a)]}
 
 data FileTreeEntity a
-  = FileEntity String 
+  = FileEntity String -- storing file contents inline for simplicity
   | DirEntity  a
 
 ```
@@ -172,7 +178,7 @@ data FileTreeEntity a
 Given this, a hashable layer is just:
 
 ```haskell
-newtype Hash = Hash { unHash :: Int}
+newtype Hash = Hash { unHash :: CH.Digest CHA.SHA256 }
 
 type HashableDirLayer = DirLayer Hash
 ```
@@ -181,7 +187,7 @@ type HashableDirLayer = DirLayer Hash
 
 # Haskell Code Sketch: Refactor
 
-But how do we represent the recursive case? Conceptually, we want something like this: 
+But how do we represent the recursive case? Conceptually, we want something like this:
 
 ```haskell
 myDir :: ???
@@ -191,7 +197,7 @@ myDir = DirLayer
       ]
 ```
 
-But the resulting type is a mess: `Dirlayer (DirLayer (DirLayer ...))` 
+But the resulting type is a mess: `Dirlayer (DirLayer (DirLayer ...))`
 
 ---
 
@@ -201,7 +207,7 @@ But the resulting type is a mess: `Dirlayer (DirLayer (DirLayer ...))`
 data DirLayer a = DirLayer { entities :: [(FilePath, FileTreeEntity a)]}
 
 data FileTreeEntity a
-  = FileEntity String 
+  = FileEntity String -- storing file contents inline for simplicity
   | DirEntity  a
 
 ```
@@ -227,7 +233,7 @@ myDir = Fix $ DirLayer
 
 - This format gives us access to some truly powerful abstractions:
 - Recursion schemes let us _generalize_ over fold and unfold
-- Like for loops _generalize_ over goto
+- Like how for loops _generalize_ over goto
 
 ---
 
@@ -235,7 +241,7 @@ myDir = Fix $ DirLayer
 
 ```haskell
 hashLayer :: DirLayer Hash -> Hash
-hashLayer = hash . AE.encode
+hashLayer = hash . BL.toStrict . AE.encode
 ```
 
 All you need to do is write a function to hash a layer!
@@ -253,10 +259,11 @@ hashDirTree = cata hashLayer
 # Writing a directory tree to disk
 
 ```haskell
-writeLayer :: DirLayer Hash -> IO Hash
-writeLayer layer = do
+-- | write a single directory layer to a file system store
+writeLayer :: FilePath -> DirLayer Hash -> IO Hash
+writeLayer baseDir layer = do
   let h = hashLayer layer
-      path = hashToPath h
+      path = hashToPath baseDir h
   AE.encodeFile path layer -- write dir layer to path
   pure h
 ```
@@ -266,8 +273,9 @@ All you need to do is write a function to write a layer to the store!
 ```haskell
 cataM :: (Monad m, Traversable f) => (f a -> m a) -> Fix f -> m a
 
-writeDirTree :: DirTree -> IO Hash
-writeDirTree = cataM writeLayer
+-- | write a directory tree to a filesystem store
+writeDirTree :: FilePath -> DirTree -> IO Hash
+writeDirTree baseDir = cataM (writeLayer baseDir)
 ```
 
 ---
@@ -275,12 +283,13 @@ writeDirTree = cataM writeLayer
 # Reading a directory tree from disk
 
 ```haskell
-readLayer :: Hash -> IO (DirLayer Hash)
-readLayer h = do
-  res <- AE.decodeFileStrict (hashToPath h)
+-- | read a single directory layer from a file system store
+readLayer :: FilePath -> Hash -> IO (DirLayer Hash)
+readLayer baseDir h = do
+  res <- AE.decodeFileStrict (hashToPath baseDir h)
   case res of
     Nothing -> fail "hash deref failed"
-    Maybe x -> pure x
+    Just  x -> pure x
 ```
 
 All you need to do is write a function to retrieve a layer from the store!
@@ -288,23 +297,9 @@ All you need to do is write a function to retrieve a layer from the store!
 ```haskell
 anaM :: (Monad m, Traversable f) => (a -> m (f a)) -> a -> m (Fix f)
 
-readDirTree :: Hash -> IO DirTree
-readDirTree = anaM writeLayer
-```
-
----
-
-# Other Benefits
-
-This formulation also simplifies lazy traversal. We'll examine how in more detail in later sessions, but here's a teaser:
-
-```haskell
-type LazyMerkleDir m = Fix ((Hash,) `Compose` m `Compose` DirLayer)
-
-readDirLazy :: Hash -> LazyMerkleDir IO
-readDirLazy = ana (Compose $ readLayer)
-  where
-    alg h = Compose (h, Compose $ readLayer h)
+-- | read a directory tree to a filesystem store
+readDirTree :: FilePath -> Hash -> IO DirTree
+readDirTree baseDir = anaM (readLayer baseDir)
 ```
 
 ---

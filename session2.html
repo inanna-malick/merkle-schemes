@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Title</title>
+    <title>Merkle Schemes 2</title>
     <meta charset="utf-8">
     <style>
       @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
@@ -13,7 +13,8 @@
         font-family: 'Yanone Kaffeesatz';
         font-weight: normal;
       }
-      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+     .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+     .footer { position: absolute; bottom: 12px; left: 20px }
     </style>
   </head>
   <body>
@@ -23,6 +24,11 @@ class: center, middle
 
 # Merkle Schemes 2
 
+---
+
+layout:true
+
+<div class="footer">Paul Kinsky, contact: pkinsky@gmail.com, twitter: @pseudo_morphism</div>
 ---
 
 # Recursion Schemes
@@ -48,9 +54,8 @@ Simple example list:
 
 ```haskell
 myList :: List Int
-myList = Fix $ Cons 1 $ Fix $ Cons 2 $ Fix Nil 
+myList = Fix $ Cons 1 $ Fix $ Cons 2 $ Fix Nil
 ```
-
 
 ---
 
@@ -83,15 +88,13 @@ toList = cata alg
   where
     alg :: ListF a [a] -> [a]
     alg Nil             = []
-    alg (Cons elem acc) = elem : acc
+    alg (Cons x acc) = x : acc
 ```
 
 ```haskell
 > toList myList
 [1,2]
 ```
-
-todo: confirm via REPL
 
 ---
 
@@ -121,9 +124,8 @@ fromList :: [a] -> List a
 fromList = ana alg
   where
     alg :: [a] -> ListF a [a]
-    alg []   = Nil
-    alg x:xs = ListF x xs
-
+    alg []     = Nil
+    alg (x:xs) = Cons x xs
 ```
 
 ```haskell
@@ -131,14 +133,9 @@ fromList = ana alg
 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 ```
 
-todo: test this - wrote late in day, might accidentally reverse list?
-
-
 ---
 
 # Working with Fix: cataM (monadic fold)
-
-todo incl traverse type sig :)
 
 ```haskell
 newtype Fix f = Fix { unFix :: f (Fix f) }
@@ -162,12 +159,12 @@ cataM alg x = do
 CataM in action: printing a list of integers
 
 ```haskell
-printElems :: Show a => List a -> IO ()
-printElems = cataM alg
+printListElems :: forall a. Show a => List a -> IO ()
+printListElems = cataM alg
   where
-    alg :: ListF () -> IO ()
+    alg :: ListF a () -> IO ()
     alg Nil = putStrLn "nil"
-    alg (Cons elem ()) = putStrLn $ "cons cell: " ++ show elem
+    alg (Cons x ()) = putStrLn $ "cons cell: " ++ show x
 ```
 
 ```haskell
@@ -177,20 +174,6 @@ cons cell: 2
 cons cell: 1
 ```
 
----
-
-# This lets us do some cool stuff!
-
-recap:
-```haskell
-data DirLayer a = DirLayer { entities :: [(FilePath, FileTreeEntity a)]}
-
-data FileTreeEntity a
-  = FileEntity String 
-  | DirEntity  a
-
-type DirTree = Fix DirLayer
-```
 ---
 
 # Working with Fix: anaM (monadic unfold)
@@ -209,11 +192,25 @@ anaM alg x = do
 ```
 ---
 
+# This lets us do some cool stuff!
+
+recap:
+```haskell
+data DirLayer a = DirLayer { entities :: [(FilePath, FileTreeEntity a)]}
+
+data FileTreeEntity a
+  = FileEntity String
+  | DirEntity  a
+
+type DirTree = Fix DirLayer
+```
+---
+
 # Hashing a directory tree
 
 ```haskell
 hashLayer :: DirLayer Hash -> Hash
-hashLayer = hash . AE.encode
+hashLayer = hash . BL.toStrict . AE.encode
 ```
 
 All you need to do is write a function to hash a layer!
@@ -231,10 +228,11 @@ hashDirTree = cata hashLayer
 # Writing a directory tree to disk
 
 ```haskell
-writeLayer :: DirLayer Hash -> IO Hash
-writeLayer layer = do
+-- | write a single directory layer to a file system store
+writeLayer :: FilePath -> DirLayer Hash -> IO Hash
+writeLayer baseDir layer = do
   let h = hashLayer layer
-      path = hashToPath h
+      path = hashToPath baseDir h
   AE.encodeFile path layer -- write dir layer to path
   pure h
 ```
@@ -244,8 +242,9 @@ All you need to do is write a function to write a layer to the store!
 ```haskell
 cataM :: (Monad m, Traversable f) => (f a -> m a) -> Fix f -> m a
 
-writeDirTree :: DirTree -> IO Hash
-writeDirTree = cataM writeLayer
+-- | write a directory tree to a filesystem store
+writeDirTree :: FilePath -> DirTree -> IO Hash
+writeDirTree baseDir = cataM (writeLayer baseDir)
 ```
 
 ---
@@ -253,12 +252,13 @@ writeDirTree = cataM writeLayer
 # Reading a directory tree from disk
 
 ```haskell
-readLayer :: Hash -> IO (DirLayer Hash)
-readLayer h = do
-  res <- AE.decodeFileStrict (hashToPath h)
+-- | read a single directory layer from a file system store
+readLayer :: FilePath -> Hash -> IO (DirLayer Hash)
+readLayer baseDir h = do
+  res <- AE.decodeFileStrict (hashToPath baseDir h)
   case res of
     Nothing -> fail "hash deref failed"
-    Maybe x -> pure x
+    Just  x -> pure x
 ```
 
 All you need to do is write a function to retrieve a layer from the store!
@@ -266,9 +266,11 @@ All you need to do is write a function to retrieve a layer from the store!
 ```haskell
 anaM :: (Monad m, Traversable f) => (a -> m (f a)) -> a -> m (Fix f)
 
-readDirTree :: Hash -> IO DirTree
-readDirTree = anaM writeLayer
+-- | read a directory tree to a filesystem store
+readDirTree :: FilePath -> Hash -> IO DirTree
+readDirTree baseDir = anaM (readLayer baseDir)
 ```
+
 
 ---
 
@@ -293,7 +295,7 @@ diffDirTrees = undefined
 
 ---
 
-# Diffing two DirTrees: entity removed/created 
+# Diffing two DirTrees: entity removed/created
 
 The case where a `FileTreeEntity` with some name only exists in one map or the other is simple
 
@@ -363,8 +365,6 @@ diffDirTrees (Dir entities1) (Dir entities2) = join $ Map.elems mergeRes
                          (Map.fromList entities2)
 ```
 
-TODO: test above code, include example directories and example outputs? -or- use off-screen readDir to go directly from file tree (can visualize easily via `tree` output) to `Dir` which can then be diffed
-
 ---
 
 # Example Diff
@@ -387,21 +387,19 @@ dir 2:
 ```
 
 result:
-```
+```haskell
 [ ("README.md", FileModified)
 , ("foo/Foo.hs", EntityDeleted)
 , ("foo/Bar.hs", EntityCreated)
 ]
 ```
 
-todo: more examples
-
 ---
 
-Hook for next:
-- will add lazy traversal
-- hash comparison based shortcutting
-- generic versions of DirTree-specific functions
+Next 2 talks:
+- Lazy traversal
+- Hash comparison based short-circuiting (essential for diffing large repos)
+- Generic versions of DirTree-specific functions
 
 ---
 
