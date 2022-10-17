@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | A BUNCH OF SHIT STOLEN FROM COMPDATA + POLYKINDS/SING stuff from me, TODO UPSTREAM PR
+-- | mostly sourced from COMPDATA, with added POLYKINDS/SING stuff from me, TODO UPSTREAM or use original
 module Util.HRecursionSchemes where
 
 --------------------------------------------
@@ -28,7 +28,7 @@ newtype K a h i = K { getK :: a}
 instance (Functor f) => HFunctor (Compose f) where
   hfmap f (Compose xs) = Compose (fmap f xs)
 
--- note: just the bit I need for cataM/anaM
+-- note: just the bit I need for hcataM/anaM
 class HTraversable t where
     hmapM :: (Monad m) => NatM m f g -> NatM m (t f) (t g)
 
@@ -60,18 +60,26 @@ instance (HFunctor f) => HFunctor (Cxt h f) where
 
 type Alg f e = f e :-> e
 
-cata :: forall f a. HFunctor f => Alg f a -> Term f :-> a
-cata f = f . hfmap (cata f) . unTerm
+hcata :: forall f a. HFunctor f => Alg f a -> Term f :-> a
+hcata f = f . hfmap (hcata f) . unTerm
+
+type RAlg f a = f (Term f `Tagged` a) :-> a
+
+-- | This function constructs a paramorphism from the given r-algebra
+hpara :: forall f a. (HFunctor f) => RAlg f a -> Term f :-> a
+hpara f = _elem . hcata run
+    where run :: Alg f  (Term f `Tagged` a)
+          run t = Term (hfmap _tag t) `Tagged` f t
 
 type AlgM m f e = NatM m (f e) e
 
--- | This is a monadic version of 'cata'.
-cataM
+-- | This is a monadic version of 'hcata'.
+hcataM
   :: forall f m a
    . (HTraversable f, Monad m)
   => AlgM m f a
   -> NatM m (Term f) a
-cataM f = (>>= f) . hmapM (cataM f) . unTerm
+hcataM f = (>>= f) . hmapM (hcataM f) . unTerm
 
 type Coalg f a = a :-> f a
 
@@ -106,12 +114,22 @@ instance HTraversable (Tagged x) where
 data HCompose f g e t = HC { getHC :: (f (g e) t) }
 infixr 7 `HCompose`
 
--- getHC :: (f `HCompose` g) e t -> f (g e) t
--- getHC (HC x) = x
-
 instance (HFunctor f, HFunctor g) => HFunctor (f `HCompose` g) where
   hfmap f (HC x) = HC $ hfmap (hfmap f) x
 
+data HEither f g i
+  = L (f i)
+  | R (g i)
+infixr 7 `HEither`
+
+instance HFunctor (HEither f) where
+  hfmap _ (L x) = L x
+  hfmap f (R x) = R $ f x
+
+
+
+-- TODO: investigate
+-- NOTE: I have no idea why I left this comment here
 -- incomplete instance, yolo, etc
 instance (HTraversable f, HTraversable g) => HTraversable (f `HCompose` g) where
     hmapM nat (HC x) = HC <$> hmapM (hmapM nat) x
@@ -121,7 +139,7 @@ annotate
    . HFunctor f
   => Alg f x
   -> Term f :-> Term (Tagged x `HCompose` f)
-annotate alg = cata alg'
+annotate alg = hcata alg'
   where
     alg' :: Alg f (Term (Tagged x `HCompose` f))
     alg' f = Term . HC $ Tagged (alg $ hfmap (_tag . getHC . unTerm) f) f

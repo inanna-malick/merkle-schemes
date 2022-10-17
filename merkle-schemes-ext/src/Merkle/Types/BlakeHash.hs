@@ -44,7 +44,6 @@ instance FromHttpApiData (Const RawBlakeHash x) where
   parseUrlPiece = maybe (Left "unable to parse hash as base16") (Right . Const) . textToHash
 
 instance Show RawBlakeHash where
-  -- only take 5, for diag.
   show x = "#[" ++ unpack (hashToText x) ++ "]"
 
 instance AE.ToJSON RawBlakeHash where

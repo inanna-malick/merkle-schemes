@@ -13,7 +13,7 @@ mkDerivation {
     random safe-exceptions singletons text
     unordered-containers
   ];
-  homepage = "https://github.com/pkinsky/merkle-schemes#readme";
+  homepage = "https://github.com/inanna-malick/merkle-schemes#readme";
   description = "merkle all the things";
   license = "unknown";
   hydraPlatforms = stdenv.lib.platforms.none;

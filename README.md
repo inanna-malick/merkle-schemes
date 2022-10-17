@@ -46,4 +46,4 @@ This library provides a set of tools for working with such structures, including
 type LazyBlockChain m = Fix ((,) Hash `Compose` m `Compose` BlockChainLayer)
 ```
 
-There are some example block chains (including one very similar to the example above) in the tests directory of this project. This library was developed during the process of developing a git/mercurial clone designed to demonstrate some concepts (lazy diff and merge algorithms, seamless fallback from local to remote stores) https://github.com/pkinsky/hgit
+There are some example block chains (including one very similar to the example above) in the tests directory of this project. This library was developed during the process of developing a git/mercurial clone designed to demonstrate some concepts (lazy diff and merge algorithms, seamless fallback from local to remote stores) https://github.com/inanna-malick/hgit

@@ -10,14 +10,14 @@ name:           merkle-schemes-higher-bt
 version:        0.1.0.0
 synopsis:       merkle all the things
 category:       Development
-homepage:       https://github.com/pkinsky/merkle-schemes#readme
-bug-reports:    https://github.com/pkinsky/merkle-schemes/issues
-author:         Paul Kinsky
+homepage:       https://github.com/inanna-malick/merkle-schemes#readme
+bug-reports:    https://github.com/inanna-malick/merkle-schemes/issues
+author:         Inanna Malick
 build-type:     Simple
 
 source-repository head
   type: git
-  location: https://github.com/pkinsky/merkle-schemes
+  location: https://github.com/inanna-malick/merkle-schemes
 
 library
   exposed-modules:

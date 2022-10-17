@@ -4,12 +4,12 @@ name:           talk
 version:        0.1.0.0
 synopsis:       suplemental material for talk
 category:       Development
-author:         Paul Kinsky
+author:         Inanna Malick
 build-type:     Simple
 
 source-repository head
   type: git
-  location: https://github.com/pkinsky/merkle-schemes
+  location: https://github.com/inanna-malick/merkle-schemes
 
 library
   exposed-modules:

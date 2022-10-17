@@ -16,7 +16,7 @@ mkDerivation {
     safe-exceptions servant servant-client servant-server singletons
     text transformers vector warp wreq
   ];
-  homepage = "https://github.com/pkinsky/merkle-schemes#readme";
+  homepage = "https://github.com/inanna-malick/merkle-schemes#readme";
   description = "merkle all the things (higher kinded, exts)";
   license = "unknown";
   hydraPlatforms = stdenv.lib.platforms.none;

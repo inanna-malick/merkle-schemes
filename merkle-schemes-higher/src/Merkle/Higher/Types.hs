@@ -9,9 +9,12 @@ import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
 import           GHC.Generics (Generic)
 --------------------------------------------
 
--- IPFS: string, compatible, 58 bit encoding - using string instead of bytestring for simplicity
+
+-- TODO: Blake2/3, functions for annotating, lifting to LMMT
 newtype Hash k
-  = Hash { unHash :: Text } deriving (Eq, Ord, Show, Generic)
+  = Hash { unHash :: RawHash } deriving (Eq, Ord, Show, Generic)
+
+type RawHash = Text
 
 instance ToJSON (Hash x) where
   toJSON = String . unHash
@@ -20,9 +23,10 @@ instance FromJSON (Hash x) where
   parseJSON =
     withText "RawHash" (pure . Hash)
 
--- | For use with IPFS links (so only top-level element need be pinned)
+-- | enumerate raw untyped keys as owned by some type
 class ExtractKeys f where
-  extractHashKeys :: f Hash i -> [Text]
+  extractHashKeys :: f Hash i -> [RawHash]
+
 
 data DagNode a
   = DagNode

@@ -5,4 +5,5 @@ packages:
 - merkle-schemes-ext
 - merkle-schemes-higher
 - merkle-schemes-higher-bt
+- mononoke
 - merkle-schemes-higher-ext
